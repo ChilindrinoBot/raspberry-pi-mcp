@@ -1,0 +1,41 @@
+import asyncio
+import argparse
+import sys
+from .audio_client import play_audio_file, stop_audio
+
+async def run_cli():
+    parser = argparse.ArgumentParser(description="MCP Audio Client CLI")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Command 'play'
+    play_parser = subparsers.add_parser("play", help="Play an audio file")
+    play_parser.add_argument("--file", required=True, help="Path to the audio file")
+
+    # Command 'stop'
+    subparsers.add_parser("stop", help="Stop current audio playback")
+
+    args = parser.parse_args()
+
+    try:
+        if args.command == "play":
+            print(f"Attempting to play: {args.file}...")
+            res = await play_audio_file(args.file)
+            print(f"Server Response: {res}")
+        elif args.command == "stop":
+            print("Requesting to stop audio...")
+            res = await stop_audio()
+            print(f"Server Response: {res}")
+        else:
+            parser.print_help()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def main():
+    try:
+        asyncio.run(run_cli())
+    except KeyboardInterrupt:
+        pass
+
+if __name__ == "__main__":
+    main()
