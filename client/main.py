@@ -2,6 +2,7 @@ import asyncio
 import argparse
 import sys
 from .audio_client import play_audio_file, stop_audio
+from .notification_client import send_notification
 
 async def run_cli():
     parser = argparse.ArgumentParser(description="MCP Audio Client CLI")
@@ -14,6 +15,10 @@ async def run_cli():
     # Command 'stop'
     subparsers.add_parser("stop", help="Stop current audio playback")
 
+    # Command 'notify'
+    notify_parser = subparsers.add_parser("notify", help="Play a notification sound")
+    notify_parser.add_argument("--random", action="store_true", help="Pick a random notification sound")
+
     args = parser.parse_args()
 
     try:
@@ -24,6 +29,10 @@ async def run_cli():
         elif args.command == "stop":
             print("Requesting to stop audio...")
             res = await stop_audio()
+            print(f"Server Response: {res}")
+        elif args.command == "notify":
+            print("Requesting notification sound...")
+            res = await send_notification(random_sound=args.random)
             print(f"Server Response: {res}")
         else:
             parser.print_help()

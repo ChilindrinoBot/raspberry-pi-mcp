@@ -2,6 +2,7 @@ import unittest
 import base64
 import time
 from server.audio.play import play_audio, stop_audio
+from server.audio.notify import notify_audio
 
 class AudioIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -13,19 +14,11 @@ class AudioIntegrationTests(unittest.TestCase):
         stop_audio()
 
     def test_play_and_stop_cycle(self) -> None:
-        # Use a tiny dummy base64 audio payload (minimal valid audio data)
-        # For a real integration test, we could load a small file, but a tiny 
-        # payload is safer for ruido.
-        # Let's use a very small real audio if possible, or just a small base64 string.
-        # Since play_audio expects valid base64 and ffplay handles the bytes,
-        # we use a small valid audio snippet.
-        
         # We'll use the actual audio.mp3 if it exists, but just for a split second.
         try:
             with open("audio.mp3", "rb") as f:
                 encoded_audio = base64.b64encode(f.read()).decode("ascii")
         except FileNotFoundError:
-            # Fallback to a dummy payload if file is missing
             encoded_audio = base64.b64encode(b"dummy audio data").decode("ascii")
 
         # 1. Test starting playback
@@ -53,5 +46,18 @@ class AudioIntegrationTests(unittest.TestCase):
         result = play_audio(encoded_audio)
         self.assertEqual(result["status"], "busy")
 
+    def test_notify_audio_default(self) -> None:
+        # Test playing the default notification sound
+        result = notify_audio(random_sound=False)
+        self.assertEqual(result["status"], "success")
+        time.sleep(1)
+
+    def test_notify_audio_random(self) -> None:
+        # Test playing a random notification sound
+        result = notify_audio(random_sound=True)
+        self.assertEqual(result["status"], "success")
+        time.sleep(1)
+
 if __name__ == "__main__":
     unittest.main()
+
