@@ -25,7 +25,7 @@ class DecodeAudioPayloadTests(unittest.TestCase):
 
 class StopAudioTests(unittest.TestCase):
     def test_returns_idle_when_nothing_is_playing(self) -> None:
-        with patch("server.audio.play._ACTIVE_PLAYER_PROCESS", None):
+        with patch("server.audio.play._is_ffplay_running", return_value=False):
             self.assertEqual(stop_audio(), {"status": "stopped", "message": "There is no active audio to stop."})
 
     def test_terminates_active_process(self) -> None:

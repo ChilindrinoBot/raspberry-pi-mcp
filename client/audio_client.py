@@ -4,19 +4,9 @@ from mcp import Client
 from server import mcp
 
 async def play_audio_file(file_path: str):
-    """Reads an audio file, encodes it to base64 and sends it to the MCP server."""
-    path = Path(file_path).resolve()
-    if not path.exists():
-        raise FileNotFoundError(f"Audio file not found: {path}")
-
-    # Read and encode the audio file
-    encoded_audio = base64.b64encode(path.read_bytes()).decode("ascii")
-
+    """Requests the server to play a local file from its filesystem."""
     async with Client(mcp) as client:
-        result = await client.call_tool(
-            "play_audio",
-            {"encoded_audio": encoded_audio},
-        )
+        result = await client.call_tool("play_audio_file", {"file_path": file_path})
         return result.structured_content
 
 async def stop_audio():

@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import time
+from pathlib import Path
 from typing import Final
 
 from .. import mcp
@@ -79,6 +80,41 @@ def _play_audio_bytes_async(audio_bytes: bytes) -> None:
                 pass
         _ACTIVE_PLAYER_PROCESS = None
         raise RuntimeError(f"Error al transmitir datos al reproductor: {exc}") from exc
+
+
+@mcp.tool()
+def play_audio_file(file_path: str) -> dict[str, str]:
+    """Play an audio file from a local path on the server. Returns busy if audio is already playing."""
+    if _is_ffplay_running():
+        return {
+            "status": "busy",
+            "message": "The system is busy. Audio is currently playing on the Raspberry Pi."
+        }
+
+    path = Path(file_path)
+    if not path.exists():
+        return {
+            "status": "error",
+            "message": f"Audio file not found: {file_path}"
+        }
+
+    try:
+        # Use ffplay directly with the file path
+        subprocess.Popen(
+            ["ffplay", "-nodisp", "-autoexit", str(path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+        return {
+            "status": "playing",
+            "message": f"Playback of {path.name} has started successfully."
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Failed to start playback: {exc}"
+        }
 
 
 @mcp.tool()
