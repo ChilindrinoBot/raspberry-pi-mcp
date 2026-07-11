@@ -5,6 +5,8 @@ The **Audio Server** is an MCP-compliant server that provides low-level access t
 ## 🛠️ Key Features
 
 - **Remote Playback**: Stream audio bytes via Base64 encoding.
+- **Local File Playback**: Trigger playback of files already present on the server's filesystem.
+- **Notification System**: Play pre-defined system notification sounds with random selection.
 - **Hardware Control**: Mute/Unmute and volume adjustments.
 - **System Awareness**: Detects if `ffplay` is already running to prevent overlapping audio.
 - **Async Execution**: Audio is played in the background to keep the server responsive.
@@ -16,7 +18,15 @@ The server exposes the following MCP tools:
 | Tool | Description | Parameters |
 | :--- | :--- | :--- |
 | `play_audio` | Plays a Base64 encoded audio string | `encoded_audio` (str) |
+| `play_audio_file` | Plays a local file from the server's disk | `file_path` (str) |
+| `notify_audio` | Plays a notification sound | `random_sound` (bool) |
 | `stop_audio` | Stops all current system playback | None |
+
+## 📚 Resources
+
+The server exposes the following MCP resources:
+
+- `notifications://list`: Returns a text list of all available notification audio files on the server.
 
 ## ⚙️ Installation
 

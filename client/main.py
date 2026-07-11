@@ -1,6 +1,7 @@
 import asyncio
 import argparse
 import sys
+import traceback
 from .audio_client import play_audio_file, stop_audio
 from .notification_client import send_notification
 
@@ -19,6 +20,9 @@ async def run_cli():
     notify_parser = subparsers.add_parser("notify", help="Play a notification sound")
     notify_parser.add_argument("--random", action="store_true", help="Pick a random notification sound")
 
+    # Command 'list'
+    list_parser = subparsers.add_parser("list", help="List available notification sounds")
+
     args = parser.parse_args()
 
     try:
@@ -34,6 +38,11 @@ async def run_cli():
             print("Requesting notification sound...")
             res = await send_notification(random_sound=args.random)
             print(f"Server Response: {res}")
+        elif args.command == "list":
+            print("Fetching available notification sounds...")
+            from .notification_client import list_notifications
+            res = await list_notifications()
+            print(f"\n{res}")
         else:
             parser.print_help()
     except Exception as e:

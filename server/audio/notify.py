@@ -30,6 +30,27 @@ def _play_file(file_path: Path) -> None:
     except Exception as e:
         raise RuntimeError(f"Failed to play notification sound: {e}")
 
+@mcp.resource("notifications://list")
+def list_notification_audios() -> str:
+    """
+    Returns a list of available notification audio files.
+    """
+    notifications = []
+    
+    if DEFAULT_AUDIO.exists():
+        notifications.append(f"Default: {DEFAULT_AUDIO.name}")
+    
+    if NOTIFICATIONS_DIR.exists() and NOTIFICATIONS_DIR.is_dir():
+        audio_files = list(NOTIFICATIONS_DIR.glob("*.mp3"))
+        for file in audio_files:
+            notifications.append(f"Custom: {file.name}")
+            
+    if not notifications:
+        return "No notification audio files found."
+        
+    return "Available notification sounds:\n" + "\n".join(notifications)
+
+
 @mcp.tool()
 def notify_audio(random_sound: bool = False) -> dict[str, str]:
     """
