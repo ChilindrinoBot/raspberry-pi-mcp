@@ -37,13 +37,10 @@ def list_notification_audios() -> str:
     """
     notifications = []
     
-    if DEFAULT_AUDIO.exists():
-        notifications.append(f"Default: {DEFAULT_AUDIO.name}")
-    
     if NOTIFICATIONS_DIR.exists() and NOTIFICATIONS_DIR.is_dir():
         audio_files = list(NOTIFICATIONS_DIR.glob("*.mp3"))
         for file in audio_files:
-            notifications.append(f"Custom: {file.name}")
+            notifications.append(file.name)
             
     if not notifications:
         return "No notification audio files found."

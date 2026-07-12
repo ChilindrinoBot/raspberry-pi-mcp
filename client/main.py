@@ -3,7 +3,8 @@ import argparse
 import sys
 import traceback
 from .audio_client import play_audio_file, stop_audio
-from .notification_client import send_notification
+from .notification_client import send_notification, list_notifications
+from .alarm_client import list_alarms
 
 async def run_cli():
     parser = argparse.ArgumentParser(description="MCP Audio Client CLI")
@@ -21,7 +22,10 @@ async def run_cli():
     notify_parser.add_argument("--random", action="store_true", help="Pick a random notification sound")
 
     # Command 'list'
-    list_parser = subparsers.add_parser("list", help="List available notification sounds")
+    list_parser = subparsers.add_parser("list-notifications", help="List available notification sounds")
+
+    # Command 'list-alarms'
+    list_alarms_parser = subparsers.add_parser("list-alarms", help="List available alarms")
 
     args = parser.parse_args()
 
@@ -38,10 +42,13 @@ async def run_cli():
             print("Requesting notification sound...")
             res = await send_notification(random_sound=args.random)
             print(f"Server Response: {res}")
-        elif args.command == "list":
+        elif args.command == "list-notifications":
             print("Fetching available notification sounds...")
-            from .notification_client import list_notifications
             res = await list_notifications()
+            print(f"\n{res}")
+        elif args.command == "list-alarms":
+            print("Fetching available alarms...")
+            res = await list_alarms()
             print(f"\n{res}")
         else:
             parser.print_help()
