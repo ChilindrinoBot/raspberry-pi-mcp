@@ -21,12 +21,14 @@ The server exposes the following MCP tools:
 | `play_audio_file` | Plays a local file from the server's disk | `file_path` (str) |
 | `notify_audio` | Plays a notification sound | `random_sound` (bool) |
 | `stop_audio` | Stops all current system playback | None |
+| `play_alarm` | Plays an alarm sound in a loop | `alarm_name` (str), `stop_time` (int) |
 
 ## 📚 Resources
 
 The server exposes the following MCP resources:
 
 - `notifications://list`: Returns a text list of all available notification audio files on the server.
+- `alarms://list`: Returns a text list of all available alarm audio files on the server.
 
 ## ⚙️ Installation
 

@@ -35,10 +35,16 @@ python -m client.main play --file path/to/audio.mp3
 python -m client.main stop
 
 # Play a notification sound (default)
-python -m client.main notify
-
-# Play a random notification sound
 python -m client.main notify --random
+
+# List available notification sounds
+python -m client.main list-notifications
+
+# Play an alarm sound
+python -m client.main play-alarm --random --stop-time 10
+
+# List available alarms
+python -m client.main list-alarms
 ```
 
 ## 🧪 Testing

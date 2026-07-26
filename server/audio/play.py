@@ -4,15 +4,28 @@ import base64
 import binascii
 import os
 import shutil
+import signal
 import subprocess
-import time
 from pathlib import Path
 from typing import Final
 
 from .. import mcp
 
 MAX_AUDIO_BYTES: Final[int] = 10 * 1024 * 1024
-_ACTIVE_PLAYER_PROCESS: subprocess.Popen[bytes] | None = None
+
+# PIDs of ffplay processes started by this server instance.
+# The server is a long-running process, so this set survives between client calls.
+_STARTED_PIDS: set[int] = set()
+
+
+def register_process(pid: int) -> None:
+    """Registers a PID to be managed by the server."""
+    _STARTED_PIDS.add(pid)
+
+
+def unregister_process(pid: int) -> None:
+    """Unregisters a PID."""
+    _STARTED_PIDS.discard(pid)
 
 
 def _decode_audio_payload(encoded_audio: str, max_bytes: int = MAX_AUDIO_BYTES) -> bytes:
@@ -38,25 +51,25 @@ def _build_player_command() -> list[str]:
 
 
 def _is_ffplay_running() -> bool:
-    """Check system-wide if an instance of ffplay is currently active."""
-    try:
-        # Usamos un comando nativo de Linux muy rápido para ver si ffplay está en ejecución
-        # Si pgrep encuentra el proceso, devuelve 0 (True). Si no, devuelve un error (False).
-        subprocess.check_output(["pgrep", "-x", "ffplay"])
-        return True
-    except subprocess.CalledProcessError:
-        return False
+    """Return True if any ffplay process started by this server is still alive."""
+    alive: set[int] = set()
+    for pid in list(_STARTED_PIDS):
+        try:
+            # Signal 0 only checks existence; raises OSError if the process is gone.
+            os.kill(pid, 0)
+            alive.add(pid)
+        except (ProcessLookupError, OSError):
+            unregister_process(pid)
+    return bool(alive)
 
 
 def _play_audio_bytes_async(audio_bytes: bytes) -> None:
     """Play audio bytes in the background without blocking."""
-    global _ACTIVE_PLAYER_PROCESS
-
     command = _build_player_command()
     env = os.environ.copy()
     env.setdefault("PULSE_RUNTIME_PATH", "/run/user/1000/pulse")
 
-    _ACTIVE_PLAYER_PROCESS = subprocess.Popen(
+    process = subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
@@ -64,22 +77,10 @@ def _play_audio_bytes_async(audio_bytes: bytes) -> None:
         start_new_session=True,
         env=env,
     )
-
-    try:
-        _ACTIVE_PLAYER_PROCESS.stdin.write(audio_bytes)
-        _ACTIVE_PLAYER_PROCESS.stdin.close()
-        
-        # Una pequeña pausa para que el proceso se registre en el sistema operativo
-        time.sleep(0.1)
-
-    except Exception as exc:
-        if _ACTIVE_PLAYER_PROCESS:
-            try:
-                _ACTIVE_PLAYER_PROCESS.kill()
-            except Exception:
-                pass
-        _ACTIVE_PLAYER_PROCESS = None
-        raise RuntimeError(f"Error al transmitir datos al reproductor: {exc}") from exc
+    if process.stdin:
+        process.stdin.write(audio_bytes)
+        process.stdin.close()
+    register_process(process.pid)
 
 
 @mcp.tool()
@@ -88,44 +89,42 @@ def play_audio_file(file_path: str) -> dict[str, str]:
     if _is_ffplay_running():
         return {
             "status": "busy",
-            "message": "The system is busy. Audio is currently playing on the Raspberry Pi."
+            "message": "The system is busy. Audio is currently playing on the Raspberry Pi.",
         }
 
     path = Path(file_path)
     if not path.exists():
         return {
             "status": "error",
-            "message": f"Audio file not found: {file_path}"
+            "message": f"Audio file not found: {file_path}",
         }
 
     try:
-        # Use ffplay directly with the file path
-        subprocess.Popen(
+        process = subprocess.Popen(
             ["ffplay", "-nodisp", "-autoexit", str(path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True
+            start_new_session=True,
         )
+        register_process(process.pid)
         return {
             "status": "playing",
-            "message": f"Playback of {path.name} has started successfully."
+            "message": f"Playback of {path.name} has started successfully.",
         }
     except Exception as exc:
         return {
             "status": "error",
-            "message": f"Failed to start playback: {exc}"
+            "message": f"Failed to start playback: {exc}",
         }
 
 
 @mcp.tool()
 def play_audio(encoded_audio: str) -> dict[str, str]:
     """Decode and play audio. If an audio is already playing system-wide, returns a busy status."""
-    
-    # NUEVA VERIFICACIÓN REAL: Le preguntamos al sistema si ffplay ya está corriendo
     if _is_ffplay_running():
         return {
             "status": "busy",
-            "message": "The system is busy. Audio is currently playing on the Raspberry Pi."
+            "message": "The system is busy. Audio is currently playing on the Raspberry Pi.",
         }
 
     audio_bytes = _decode_audio_payload(encoded_audio)
@@ -137,32 +136,27 @@ def play_audio(encoded_audio: str) -> dict[str, str]:
 
     return {
         "status": "playing",
-        "message": "Playback has started successfully."
+        "message": "Playback has started successfully.",
     }
 
 
 @mcp.tool()
 def stop_audio() -> dict[str, str]:
-    """Stop all active audio playbacks system-wide."""
-    global _ACTIVE_PLAYER_PROCESS
-
+    """Stop all audio playbacks started by this server."""
     if not _is_ffplay_running():
-        _ACTIVE_PLAYER_PROCESS = None
         return {"status": "stopped", "message": "There is no active audio to stop."}
 
-    # Si tenemos la referencia del proceso local, intentamos cerrarlo amigablemente
-    if _ACTIVE_PLAYER_PROCESS and _ACTIVE_PLAYER_PROCESS.poll() is None:
-        _ACTIVE_PLAYER_PROCESS.terminate()
+    errors: list[str] = []
+    for pid in list(_STARTED_PIDS):
         try:
-            _ACTIVE_PLAYER_PROCESS.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            _ACTIVE_PLAYER_PROCESS.kill()
-    
-    # Por si acaso hubiera otro proceso ffplay huérfano o paralelo, lo matamos a nivel sistema
-    try:
-        subprocess.run(["pkill", "-x", "ffplay"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
+            os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass
+        except Exception as exc:
+            errors.append(str(exc))
+        finally:
+            unregister_process(pid)
 
-    _ACTIVE_PLAYER_PROCESS = None
+    if errors:
+        return {"status": "stopped", "message": f"Stopped with warnings: {'; '.join(errors)}"}
     return {"status": "stopped", "message": "All active audio playbacks have been stopped."}

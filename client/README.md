@@ -15,7 +15,10 @@ python -m client.main play --file "my_song.mp3"
 python -m client.main notify --random
 
 # 📋 List available notification sounds
-python -m client.main list
+python -m client.main list-notifications
+
+# ⏰ Play an alarm sound
+python -m client.main play-alarm --random --stop-time 10
 
 # 🛑 Stop the server from playing audio
 python -m client.main stop
@@ -28,11 +31,16 @@ You can integrate the client into your own Python scripts:
 import asyncio
 from client.audio_client import play_audio_file, stop_audio
 from client.notification_client import send_notification, list_notifications
+from client.alarm_client import list_alarms
 
 async def main():
     # 📋 List available notifications
     sounds = await list_notifications()
     print(f"Available sounds:\n{sounds}")
+
+    # ⏰ List available alarms
+    alarms = await list_alarms()
+    print(f"Available alarms:\n{alarms}")
 
     # 🔔 Trigger a notification
     await send_notification(random_sound=True)
@@ -43,6 +51,7 @@ async def main():
 
     # Later, stop the playback
     await stop_audio()
+
 
 asyncio.run(main())
 ```
