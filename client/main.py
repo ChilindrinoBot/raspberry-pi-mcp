@@ -5,7 +5,7 @@ import traceback
 from .audio_client import play_audio_file, stop_audio
 from .notification_client import send_notification, list_notifications
 from .alarm_client import list_alarms, play_alarm
-from .speaker_client import mute, unmute
+from .speaker_client import mute, unmute, set_volume, get_volume
 
 async def run_cli():
     parser = argparse.ArgumentParser(description="MCP Audio Client CLI")
@@ -39,6 +39,13 @@ async def run_cli():
 
     # Command 'unmute'
     subparsers.add_parser("unmute", help="Unmute the audio output")
+
+    # Command 'set-volume'
+    volume_parser = subparsers.add_parser("set-volume", help="Set the volume level (0-100)")
+    volume_parser.add_argument("--level", type=int, required=True, help="Volume level (0-100)")
+
+    # Command 'get-volume'
+    subparsers.add_parser("get-volume", help="Get the current volume level")
 
     args = parser.parse_args()
 
@@ -75,6 +82,14 @@ async def run_cli():
             print("Requesting to unmute audio...")
             res = await unmute()
             print(f"Server Response: {res}")
+        elif args.command == "set-volume":
+            print(f"Requesting to set volume to {args.level}%...")
+            res = await set_volume(args.level)
+            print(f"Server Response: {res}")
+        elif args.command == "get-volume":
+            print("Fetching current volume level...")
+            res = await get_volume()
+            print(f"\n{res}")
         else:
             parser.print_help()
     except Exception as e:
