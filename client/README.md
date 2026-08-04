@@ -20,6 +20,12 @@ python -m client.main list-notifications
 # ⏰ Play an alarm sound
 python -m client.main play-alarm --random --stop-time 10
 
+# 🔇 Mute the audio output
+python -m client.main mute
+
+# 🔊 Unmute the audio output
+python -m client.main unmute
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -32,6 +38,7 @@ import asyncio
 from client.audio_client import play_audio_file, stop_audio
 from client.notification_client import send_notification, list_notifications
 from client.alarm_client import list_alarms
+from client.speaker_client import mute, unmute
 
 async def main():
     # 📋 List available notifications
@@ -48,6 +55,12 @@ async def main():
     # 🎵 Start playing a file
     result = await play_audio_file("alert.wav")
     print(f"Server said: {result}")
+
+    # 🔇 Mute the audio output
+    await mute()
+
+    # 🔊 Unmute the audio output
+    await unmute()
 
     # Later, stop the playback
     await stop_audio()

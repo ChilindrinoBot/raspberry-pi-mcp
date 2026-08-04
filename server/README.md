@@ -22,6 +22,8 @@ The server exposes the following MCP tools:
 | `notify_audio` | Plays a notification sound | `random_sound` (bool) |
 | `stop_audio` | Stops all current system playback | None |
 | `play_alarm` | Plays an alarm sound in a loop | `alarm_name` (str), `stop_time` (int) |
+| `mute` | Mutes the audio output | None |
+| `unmute` | Unmutes the audio output | None |
 
 ## 📚 Resources
 

@@ -11,6 +11,8 @@ from .audio import (
     list_notification_audios,
     play_alarm,
     list_alarm_audios,
+    mute,
+    unmute,
 )
 
 __all__ = [
@@ -20,5 +22,7 @@ __all__ = [
     "notify_audio",
     "list_notification_audios",
     "play_alarm",
-    "list_alarm_audios"
+    "list_alarm_audios",
+    "mute",
+    "unmute"
 ]

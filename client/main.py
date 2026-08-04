@@ -5,6 +5,7 @@ import traceback
 from .audio_client import play_audio_file, stop_audio
 from .notification_client import send_notification, list_notifications
 from .alarm_client import list_alarms, play_alarm
+from .speaker_client import mute, unmute
 
 async def run_cli():
     parser = argparse.ArgumentParser(description="MCP Audio Client CLI")
@@ -33,6 +34,12 @@ async def run_cli():
     # Command 'list-alarms'
     list_alarms_parser = subparsers.add_parser("list-alarms", help="List available alarms")
 
+    # Command 'mute'
+    subparsers.add_parser("mute", help="Mute the audio output")
+
+    # Command 'unmute'
+    subparsers.add_parser("unmute", help="Unmute the audio output")
+
     args = parser.parse_args()
 
     try:
@@ -60,6 +67,14 @@ async def run_cli():
             print("Fetching available alarms...")
             res = await list_alarms()
             print(f"\n{res}")
+        elif args.command == "mute":
+            print("Requesting to mute audio...")
+            res = await mute()
+            print(f"Server Response: {res}")
+        elif args.command == "unmute":
+            print("Requesting to unmute audio...")
+            res = await unmute()
+            print(f"Server Response: {res}")
         else:
             parser.print_help()
     except Exception as e:
