@@ -10,22 +10,23 @@ from pathlib import Path
 from typing import Final
 
 from .. import mcp
+from ..audio.manager import audio_manager
 
 MAX_AUDIO_BYTES: Final[int] = 10 * 1024 * 1024
 
 # PIDs of ffplay processes started by this server instance.
 # The server is a long-running process, so this set survives between client calls.
-_STARTED_PIDS: set[int] = set()
+_STARTED_PIDS: set[int] = audio_manager._started_pids
 
 
 def register_process(pid: int) -> None:
     """Registers a PID to be managed by the server."""
-    _STARTED_PIDS.add(pid)
+    audio_manager.register_process(pid)
 
 
 def unregister_process(pid: int) -> None:
     """Unregisters a PID."""
-    _STARTED_PIDS.discard(pid)
+    audio_manager.unregister_process(pid)
 
 
 def _decode_audio_payload(encoded_audio: str, max_bytes: int = MAX_AUDIO_BYTES) -> bytes:
@@ -52,15 +53,7 @@ def _build_player_command() -> list[str]:
 
 def _is_ffplay_running() -> bool:
     """Return True if any ffplay process started by this server is still alive."""
-    alive: set[int] = set()
-    for pid in list(_STARTED_PIDS):
-        try:
-            # Signal 0 only checks existence; raises OSError if the process is gone.
-            os.kill(pid, 0)
-            alive.add(pid)
-        except (ProcessLookupError, OSError):
-            unregister_process(pid)
-    return bool(alive)
+    return audio_manager.is_ffplay_running()
 
 
 def _play_audio_bytes_async(audio_bytes: bytes) -> None:
@@ -80,13 +73,12 @@ def _play_audio_bytes_async(audio_bytes: bytes) -> None:
     if process.stdin:
         process.stdin.write(audio_bytes)
         process.stdin.close()
-    register_process(process.pid)
+    audio_manager.register_process(process.pid, process)
 
 
-@mcp.tool()
 def play_audio_file(file_path: str) -> dict[str, str]:
     """Play an audio file from a local path on the server. Returns busy if audio is already playing."""
-    if _is_ffplay_running():
+    if audio_manager.is_ffplay_running():
         return {
             "status": "busy",
             "message": "The system is busy. Audio is currently playing on the Raspberry Pi.",
@@ -100,13 +92,7 @@ def play_audio_file(file_path: str) -> dict[str, str]:
         }
 
     try:
-        process = subprocess.Popen(
-            ["ffplay", "-nodisp", "-autoexit", str(path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        register_process(process.pid)
+        audio_manager.start_process(["ffplay", "-nodisp", "-autoexit", str(path)])
         return {
             "status": "playing",
             "message": f"Playback of {path.name} has started successfully.",
@@ -146,17 +132,7 @@ def stop_audio() -> dict[str, str]:
     if not _is_ffplay_running():
         return {"status": "stopped", "message": "There is no active audio to stop."}
 
-    errors: list[str] = []
-    for pid in list(_STARTED_PIDS):
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except (ProcessLookupError, OSError):
-            pass
-        except Exception as exc:
-            errors.append(str(exc))
-        finally:
-            unregister_process(pid)
-
+    errors = audio_manager.stop_all()
     if errors:
         return {"status": "stopped", "message": f"Stopped with warnings: {'; '.join(errors)}"}
     return {"status": "stopped", "message": "All active audio playbacks have been stopped."}

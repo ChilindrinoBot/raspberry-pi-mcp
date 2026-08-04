@@ -6,7 +6,8 @@ import random
 from pathlib import Path
 from typing import Final
 
-from ..audio.play import _is_ffplay_running, stop_audio
+from ..audio.play import _is_ffplay_running, stop_audio, register_process
+from ..audio.manager import audio_manager
 from .. import mcp
 
 # Absolute paths based on workspace structure
@@ -73,8 +74,9 @@ def play_alarm(stop_time: int = DEFAULT_ALARM_STOP_TIME, random_alarm: bool = Fa
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
-        from ..audio.play import register_process
+
         register_process(process.pid)
+        audio_manager.register_process(process.pid, process)
     except Exception as exc:
         return {
             "status": "error",

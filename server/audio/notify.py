@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Final
 
 from .. import mcp
+from ..audio.manager import audio_manager
 
 # Absolute paths based on workspace structure
 MEDIA_ROOT: Final[Path] = Path(__file__).resolve().parents[2] / "media"
@@ -21,12 +22,7 @@ def _play_file(file_path: Path) -> None:
     with -nodisp and -autoexit for a simple one-shot notification.
     """
     try:
-        subprocess.Popen(
-            ["ffplay", "-nodisp", "-autoexit", str(file_path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
-        )
+        audio_manager.start_process(["ffplay", "-nodisp", "-autoexit", str(file_path)])
     except Exception as e:
         raise RuntimeError(f"Failed to play notification sound: {e}")
 
