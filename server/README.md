@@ -24,6 +24,7 @@ The server exposes the following MCP tools:
 | `play_alarm` | Plays an alarm sound in a loop | `alarm_name` (str), `stop_time` (int) |
 | `mute` | Mutes the audio output | None |
 | `unmute` | Unmutes the audio output | None |
+| `set_volume` | Sets the audio output volume to a level between 0 and 100 | `level` (int) |
 
 ## 📚 Resources
 
@@ -31,6 +32,7 @@ The server exposes the following MCP resources:
 
 - `notifications://list`: Returns a text list of all available notification audio files on the server.
 - `alarms://list`: Returns a text list of all available alarm audio files on the server.
+- `speaker://volume`: Returns the current audio output volume level (0-100) as text, e.g. `Current volume: 75%`.
 
 ## ⚙️ Installation
 

@@ -26,6 +26,12 @@ python -m client.main mute
 # 🔊 Unmute the audio output
 python -m client.main unmute
 
+# 🔉 Set the volume to a specific level (0-100)
+python -m client.main set-volume --level 75
+
+# 📊 Get the current volume level
+python -m client.main get-volume
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -38,7 +44,7 @@ import asyncio
 from client.audio_client import play_audio_file, stop_audio
 from client.notification_client import send_notification, list_notifications
 from client.alarm_client import list_alarms
-from client.speaker_client import mute, unmute
+from client.speaker_client import mute, unmute, set_volume, get_volume
 
 async def main():
     # 📋 List available notifications
@@ -61,6 +67,13 @@ async def main():
 
     # 🔊 Unmute the audio output
     await unmute()
+
+    # 🔉 Set the volume to 75%
+    await set_volume(75)
+
+    # 📊 Get the current volume level
+    volume = await get_volume()
+    print(f"Current volume: {volume}")
 
     # Later, stop the playback
     await stop_audio()

@@ -116,12 +116,3 @@ def get_volume() -> str:
 
     return f"Current volume: {level}%"
 
-
-def increase_volume(step: int = 5) -> dict[str, str | int]:
-    """Placeholder for increasing the volume level."""
-    return {"status": "volume-increased", "level": step}
-
-
-def decrease_volume(step: int = 5) -> dict[str, str | int]:
-    """Placeholder for decreasing the volume level."""
-    return {"status": "volume-decreased", "level": step}
