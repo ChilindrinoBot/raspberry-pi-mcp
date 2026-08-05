@@ -6,6 +6,7 @@ from .audio_client import play_audio_file, stop_audio
 from .notification_client import send_notification, list_notifications
 from .alarm_client import list_alarms, play_alarm
 from .speaker_client import mute, unmute, set_volume, get_volume
+from .micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 
 async def run_cli():
     parser = argparse.ArgumentParser(description="MCP Audio Client CLI")
@@ -46,6 +47,22 @@ async def run_cli():
 
     # Command 'get-volume'
     subparsers.add_parser("get-volume", help="Get the current volume level")
+
+    # Command 'mute-mic'
+    subparsers.add_parser("mute-mic", help="Mute the microphone")
+
+    # Command 'unmute-mic'
+    subparsers.add_parser("unmute-mic", help="Unmute the microphone")
+
+    # Command 'set-mic-volume'
+    mic_volume_parser = subparsers.add_parser("set-mic-volume", help="Set the microphone volume level (0-100)")
+    mic_volume_parser.add_argument("--level", type=int, required=True, help="Microphone volume level (0-100)")
+
+    # Command 'get-mic-volume'
+    subparsers.add_parser("get-mic-volume", help="Get the current microphone volume level")
+
+    # Command 'get-mic-mute-state'
+    subparsers.add_parser("get-mic-mute-state", help="Get the current microphone mute state")
 
     args = parser.parse_args()
 
@@ -89,6 +106,26 @@ async def run_cli():
         elif args.command == "get-volume":
             print("Fetching current volume level...")
             res = await get_volume()
+            print(f"\n{res}")
+        elif args.command == "mute-mic":
+            print("Requesting to mute microphone...")
+            res = await mute_mic()
+            print(f"Server Response: {res}")
+        elif args.command == "unmute-mic":
+            print("Requesting to unmute microphone...")
+            res = await unmute_mic()
+            print(f"Server Response: {res}")
+        elif args.command == "set-mic-volume":
+            print(f"Requesting to set microphone volume to {args.level}%...")
+            res = await set_mic_volume(args.level)
+            print(f"Server Response: {res}")
+        elif args.command == "get-mic-volume":
+            print("Fetching current microphone volume level...")
+            res = await get_mic_volume()
+            print(f"\n{res}")
+        elif args.command == "get-mic-mute-state":
+            print("Fetching current microphone mute state...")
+            res = await get_mic_mute_state()
             print(f"\n{res}")
         else:
             parser.print_help()

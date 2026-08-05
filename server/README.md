@@ -7,7 +7,7 @@ The **Audio Server** is an MCP-compliant server that provides low-level access t
 - **Remote Playback**: Stream audio bytes via Base64 encoding.
 - **Local File Playback**: Trigger playback of files already present on the server's filesystem.
 - **Notification System**: Play pre-defined system notification sounds with random selection.
-- **Hardware Control**: Mute/Unmute and volume adjustments.
+- **Hardware Control**: Mute/Unmute and volume adjustments for both speakers and microphone.
 - **System Awareness**: Detects if `ffplay` is already running to prevent overlapping audio.
 - **Async Execution**: Audio is played in the background to keep the server responsive.
 
@@ -25,6 +25,9 @@ The server exposes the following MCP tools:
 | `mute` | Mutes the audio output | None |
 | `unmute` | Unmutes the audio output | None |
 | `set_volume` | Sets the audio output volume to a level between 0 and 100 | `level` (int) |
+| `mute_mic` | Mutes the microphone | None |
+| `unmute_mic` | Unmutes the microphone | None |
+| `set_mic_volume` | Sets the microphone volume to a level between 0 and 100 | `level` (int) |
 
 ## 📚 Resources
 
@@ -33,6 +36,8 @@ The server exposes the following MCP resources:
 - `notifications://list`: Returns a text list of all available notification audio files on the server.
 - `alarms://list`: Returns a text list of all available alarm audio files on the server.
 - `speaker://volume`: Returns the current audio output volume level (0-100) as text, e.g. `Current volume: 75%`.
+- `micphone://mute-state`: Returns the current microphone mute state as text, e.g. `Microphone is muted.` or `Microphone is unmuted.`.
+- `micphone://volume`: Returns the current microphone volume level (0-100) as text, e.g. `Current microphone volume: 75%`.
 
 ## ⚙️ Installation
 

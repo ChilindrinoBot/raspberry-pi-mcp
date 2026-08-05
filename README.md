@@ -5,7 +5,7 @@ A distributed audio management system based on the **Model Context Protocol (MCP
 
 ## 🏗️ Architecture
 The system is split into two main components:
-- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, and play notification sounds.
+- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, and play notification sounds.
 - **`client/`**: A reference Python client that demonstrates how to send audio files and control commands to the server.
 
 ## 🚀 Quick Start
@@ -45,6 +45,18 @@ python -m client.main play-alarm --random --stop-time 10
 
 # List available alarms
 python -m client.main list-alarms
+
+# 🔇 Mute the microphone
+python -m client.main mute-mic
+
+# 🔊 Unmute the microphone
+python -m client.main unmute-mic
+
+# 🔉 Set the microphone volume to a specific level (0-100)
+python -m client.main set-mic-volume --level 75
+
+# 📊 Get the current microphone volume level
+python -m client.main get-mic-volume
 ```
 
 ## 🧪 Testing
@@ -71,9 +83,11 @@ python -m unittest discover tests
 │   ├── audio_client.py # Audio control logic
 │   └── notification_client.py # Notification logic
 ├── server/             # MCP Server implementation
-│   ├── audio/          # Audio playback and volume logic
+│   ├── audio/          # Audio playback, volume and microphone logic
 │   │   ├── play.py     # Base audio control
-│   │   └── notify.py   # Notification sounds logic
+│   │   ├── notify.py   # Notification sounds logic
+│   │   ├── speaker.py  # Speaker mute/unmute and volume control
+│   │   └── micphone.py # Microphone mute/unmute and volume control
 │   ├── image/          # Placeholder for image tools
 │   └── video/          # Placeholder for video tools
 └── tests/              # Integration tests

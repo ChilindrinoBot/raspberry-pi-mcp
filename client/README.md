@@ -32,6 +32,21 @@ python -m client.main set-volume --level 75
 # 📊 Get the current volume level
 python -m client.main get-volume
 
+# 🎤 Mute the microphone
+python -m client.main mute-mic
+
+# 🎤 Unmute the microphone
+python -m client.main unmute-mic
+
+# 🎚️ Set the microphone volume to a specific level (0-100)
+python -m client.main set-mic-volume --level 75
+
+# 📊 Get the current microphone volume level
+python -m client.main get-mic-volume
+
+# 🎤 Get the current microphone mute state
+python -m client.main get-mic-mute-state
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -45,6 +60,7 @@ from client.audio_client import play_audio_file, stop_audio
 from client.notification_client import send_notification, list_notifications
 from client.alarm_client import list_alarms
 from client.speaker_client import mute, unmute, set_volume, get_volume
+from client.micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 
 async def main():
     # 📋 List available notifications
@@ -74,6 +90,23 @@ async def main():
     # 📊 Get the current volume level
     volume = await get_volume()
     print(f"Current volume: {volume}")
+
+    # 🎤 Mute the microphone
+    await mute_mic()
+
+    # 🎤 Unmute the microphone
+    await unmute_mic()
+
+    # 🎚️ Set the microphone volume to 75%
+    await set_mic_volume(75)
+
+    # 📊 Get the current microphone volume level
+    mic_volume = await get_mic_volume()
+    print(f"Current microphone volume: {mic_volume}")
+
+    # 🎤 Get the current microphone mute state
+    mic_mute_state = await get_mic_mute_state()
+    print(f"Microphone mute state: {mic_mute_state}")
 
     # Later, stop the playback
     await stop_audio()

@@ -15,6 +15,11 @@ from .audio import (
     unmute,
     get_volume,
     set_volume,
+    mute_mic,
+    unmute_mic,
+    set_mic_volume,
+    get_mic_mute_state_resource,
+    get_mic_volume,
 )
 
 __all__ = [
@@ -28,5 +33,10 @@ __all__ = [
     "mute",
     "unmute",
     "get_volume",
-    "set_volume"
+    "set_volume",
+    "mute_mic",
+    "unmute_mic",
+    "set_mic_volume",
+    "get_mic_mute_state_resource",
+    "get_mic_volume",
 ]
