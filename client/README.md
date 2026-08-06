@@ -1,6 +1,6 @@
-# 🎮 MCP Audio Client
+# 🎮 MCP Audio & Camera Client
 
-The **Audio Client** is a reference implementation of a client that communicates with the MCP Audio Server. It provides both a programmatic API and a Command Line Interface (CLI).
+The **Audio & Camera Client** is a reference implementation of a client that communicates with the MCP Audio & Camera Server. It provides both a programmatic API and a Command Line Interface (CLI).
 
 ## 🚀 Usage
 
@@ -47,6 +47,9 @@ python -m client.main get-mic-volume
 # 🎤 Get the current microphone mute state
 python -m client.main get-mic-mute-state
 
+# 📷 Capture a photo from the Raspberry Pi camera
+python -m client.main take-photo --output photo.jpg
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -61,6 +64,7 @@ from client.notification_client import send_notification, list_notifications
 from client.alarm_client import list_alarms
 from client.speaker_client import mute, unmute, set_volume, get_volume
 from client.micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
+from client.image_client import take_photo, save_photo
 
 async def main():
     # 📋 List available notifications
@@ -108,6 +112,14 @@ async def main():
     mic_mute_state = await get_mic_mute_state()
     print(f"Microphone mute state: {mic_mute_state}")
 
+    # 📷 Capture a photo and save it to a file
+    result = await save_photo("photo.jpg")
+    print(f"Photo saved: {result}")
+
+    # 📷 Or capture a photo and get the raw bytes
+    photo = await take_photo()
+    print(f"Photo format: {photo['format']}, {len(photo['data'])} bytes")
+
     # Later, stop the playback
     await stop_audio()
 
@@ -121,8 +133,9 @@ asyncio.run(main())
 2. **Resource Discovery**: Uses MCP resources to discover available notification sounds.
 3. **MCP Call**: Dispatches a `call_tool` request to the server's `play_audio_file` or `notify_audio` tools.
 4. **Remote Execution**: The server decodes the string and pipes the bytes directly to the system audio player.
+5. **Photo Capture**: The client calls the `take_photo` tool, receives a Base64-encoded JPEG, decodes it, and saves it locally.
 
 ## 📋 Requirements
 - Python 3.11+
 - `mcp` client library
-- Access to a running MCP Audio Server
+- Access to a running MCP Audio & Camera Server

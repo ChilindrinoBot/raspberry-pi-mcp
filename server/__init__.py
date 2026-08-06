@@ -21,6 +21,7 @@ from .audio import (
     get_mic_mute_state_resource,
     get_mic_volume,
 )
+from .image import take_photo
 
 __all__ = [
     "mcp", 
@@ -39,4 +40,5 @@ __all__ = [
     "set_mic_volume",
     "get_mic_mute_state_resource",
     "get_mic_volume",
+    "take_photo",
 ]

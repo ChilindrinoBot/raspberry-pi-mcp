@@ -7,6 +7,7 @@ from .notification_client import send_notification, list_notifications
 from .alarm_client import list_alarms, play_alarm
 from .speaker_client import mute, unmute, set_volume, get_volume
 from .micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
+from .image_client import save_photo
 
 async def run_cli():
     parser = argparse.ArgumentParser(description="MCP Audio Client CLI")
@@ -63,6 +64,10 @@ async def run_cli():
 
     # Command 'get-mic-mute-state'
     subparsers.add_parser("get-mic-mute-state", help="Get the current microphone mute state")
+
+    # Command 'take-photo'
+    photo_parser = subparsers.add_parser("take-photo", help="Capture a photo from the Raspberry Pi camera")
+    photo_parser.add_argument("--output", required=True, help="Path where the photo will be saved (e.g. photo.jpg)")
 
     args = parser.parse_args()
 
@@ -127,6 +132,10 @@ async def run_cli():
             print("Fetching current microphone mute state...")
             res = await get_mic_mute_state()
             print(f"\n{res}")
+        elif args.command == "take-photo":
+            print("Capturing photo from Raspberry Pi camera...")
+            res = await save_photo(args.output)
+            print(f"Server Response: {res}")
         else:
             parser.print_help()
     except Exception as e:
