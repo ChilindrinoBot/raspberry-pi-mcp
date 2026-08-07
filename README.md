@@ -5,7 +5,7 @@ A distributed audio management system based on the **Model Context Protocol (MCP
 
 ## 🏗️ Architecture
 The system is split into two main components:
-- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, and play notification sounds.
+- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, and capture photos/videos from the camera.
 - **`client/`**: A reference Python client that demonstrates how to send audio files and control commands to the server.
 
 ## 🚀 Quick Start
@@ -57,6 +57,12 @@ python -m client.main set-mic-volume --level 75
 
 # 📊 Get the current microphone volume level
 python -m client.main get-mic-volume
+
+# 📷 Capture a photo from the Raspberry Pi camera
+python -m client.main take-photo --output photo.jpg
+
+# 🎥 Record a 15 second video from the Raspberry Pi camera at a low framerate
+python -m client.main record-video --output video.mp4 --duration 15 --fps 10
 ```
 
 ## 🧪 Testing
@@ -81,6 +87,8 @@ python -m unittest discover tests
 ├── client/             # Reference MCP Client
 │   ├── main.py         # Client CLI entry point
 │   ├── audio_client.py # Audio control logic
+│   ├── image_client.py # Photo capture logic
+│   ├── video_client.py # Video recording logic
 │   └── notification_client.py # Notification logic
 ├── server/             # MCP Server implementation
 │   ├── audio/          # Audio playback, volume and microphone logic
@@ -88,7 +96,7 @@ python -m unittest discover tests
 │   │   ├── notify.py   # Notification sounds logic
 │   │   ├── speaker.py  # Speaker mute/unmute and volume control
 │   │   └── micphone.py # Microphone mute/unmute and volume control
-│   ├── image/          # Placeholder for image tools
-│   └── video/          # Placeholder for video tools
+│   ├── image/          # Photo capture tools
+│   └── video/          # Video recording tools
 └── tests/              # Integration tests
 ```

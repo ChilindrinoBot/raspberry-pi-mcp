@@ -9,6 +9,7 @@ The **Audio & Camera Server** is an MCP-compliant server that provides low-level
 - **Notification System**: Play pre-defined system notification sounds with random selection.
 - **Hardware Control**: Mute/Unmute and volume adjustments for both speakers and microphone.
 - **Photo Capture**: Capture photos from the Raspberry Pi camera and return them Base64-encoded.
+- **Video Recording**: Record short video clips from the Raspberry Pi camera and return them Base64-encoded. Duration (1–30 s) and framerate (1–30 fps) are controllable; a low framerate keeps the payload small.
 - **System Awareness**: Detects if `ffplay` is already running to prevent overlapping audio.
 - **Async Execution**: Audio is played in the background to keep the server responsive.
 
@@ -30,6 +31,7 @@ The server exposes the following MCP tools:
 | `unmute_mic` | Unmutes the microphone | None |
 | `set_mic_volume` | Sets the microphone volume to a level between 0 and 100 | `level` (int) |
 | `take_photo` | Captures a photo from the Raspberry Pi camera and returns it Base64-encoded | None |
+| `record_video` | Records a video clip and returns it Base64-encoded (clamped to 1–30 s, 1–30 fps) | `duration_seconds` (int), `fps` (int) |
 
 ## 📚 Resources
 
@@ -50,17 +52,22 @@ sudo apt install ffmpeg
 ```
 
 For camera capture, the server needs one of:
-- `rpicam-still` (newest Raspberry Pi OS with libcamera, Bookworm+)
-- `libcamera-still` (modern Raspberry Pi OS)
-- `raspistill` (legacy Raspberry Pi OS)
+- `rpicam-vid` (newest Raspberry Pi OS with libcamera, Bookworm+)
+- `libcamera-vid` (modern Raspberry Pi OS)
+- `raspivid` (legacy Raspberry Pi OS)
 
 Install with:
 ```bash
-sudo apt install rpicam-apps   # Bookworm+ (rpicam-still)
+sudo apt install rpicam-apps   # Bookworm+ (rpicam-vid)
 # or
-sudo apt install libcamera-apps   # older Pi OS (libcamera-still)
+sudo apt install libcamera-apps   # older Pi OS (libcamera-vid)
 # or
-sudo apt install raspberrypi-userland  # legacy Pi OS (raspistill)
+sudo apt install raspberrypi-userland  # legacy Pi OS (raspivid)
+```
+
+Video remuxing to MP4 also requires `ffmpeg`:
+```bash
+sudo apt install ffmpeg
 ```
 
 ### Running the Server
@@ -74,5 +81,8 @@ python -m server.main
 - **Audio Pipeline**: The server receives Base64 data $\rightarrow$ decodes to bytes $\rightarrow$ pipes into `ffplay` via `stdin`.
 - **Photo Pipeline**: The server captures a photo via `rpicam-still`, `libcamera-still` or `raspistill` $\rightarrow$ reads the JPEG bytes $\rightarrow$ returns them Base64-encoded to the client.
 - **Photo Performance**: Captures at 1280x720 @ JPEG quality 85 (≈150 KB) with a 100 ms timeout override (default is ~5 s), making capture, Base64 encoding, and HTTP transfer fast.
+- **Video Pipeline**: The server records H.264 via `rpicam-vid`, `libcamera-vid` or `raspivid` (raw stream) $\rightarrow$ remuxes to MP4 with ffmpeg $\rightarrow$ returns the bytes Base64-encoded to the client. If ffmpeg is missing, it gracefully falls back to sending the raw H.264 stream.
+- **Video Timing Fix**: The raw H.264 stream carries a broken SPS VUI rate, so ffmpeg is invoked with `-r <fps>` as an **input** option to stamp correct timestamps; otherwise the MP4 is ~0 s long and players only show a single frame.
+- **Video Limits**: Duration is clamped to `[1, 30]` s and framerate to `[1, 30]` fps; payloads above 50 MB are rejected.
 - **Process Management**: Uses `pgrep` and `pkill` to ensure only one audio source is active at a time.
 - **Memory Safety**: Implements a `MAX_AUDIO_BYTES` limit (10MB) to prevent memory exhaustion.

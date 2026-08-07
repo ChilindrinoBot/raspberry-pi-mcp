@@ -50,6 +50,9 @@ python -m client.main get-mic-mute-state
 # 📷 Capture a photo from the Raspberry Pi camera
 python -m client.main take-photo --output photo.jpg
 
+# 🎥 Record a 15 second video at 10 fps
+python -m client.main record-video --output video.mp4 --duration 15 --fps 10
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -65,6 +68,7 @@ from client.alarm_client import list_alarms
 from client.speaker_client import mute, unmute, set_volume, get_volume
 from client.micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from client.image_client import take_photo, save_photo
+from client.video_client import record_video, save_video
 
 async def main():
     # 📋 List available notifications
@@ -120,6 +124,14 @@ async def main():
     photo = await take_photo()
     print(f"Photo format: {photo['format']}, {len(photo['data'])} bytes")
 
+    # 🎥 Record a 15 second video at 10 fps and save it
+    result = await save_video("video.mp4", duration_seconds=15, fps=10)
+    print(f"Video saved: {result}")
+
+    # 🎥 Or record a video and get the raw bytes
+    video = await record_video(duration_seconds=5, fps=10)
+    print(f"Video format: {video['format']}, {len(video['data'])} bytes")
+
     # Later, stop the playback
     await stop_audio()
 
@@ -134,6 +146,7 @@ asyncio.run(main())
 3. **MCP Call**: Dispatches a `call_tool` request to the server's `play_audio_file` or `notify_audio` tools.
 4. **Remote Execution**: The server decodes the string and pipes the bytes directly to the system audio player.
 5. **Photo Capture**: The client calls the `take_photo` tool, receives a Base64-encoded JPEG, decodes it, and saves it locally.
+6. **Video Recording**: The client calls the `record_video` tool with `duration_seconds` and `fps`, receives a Base64-encoded MP4, decodes it, and saves it locally.
 
 ## 📋 Requirements
 - Python 3.11+

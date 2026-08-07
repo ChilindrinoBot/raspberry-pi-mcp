@@ -8,6 +8,7 @@ from .alarm_client import list_alarms, play_alarm
 from .speaker_client import mute, unmute, set_volume, get_volume
 from .micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from .image_client import save_photo
+from .video_client import save_video
 
 async def run_cli():
     parser = argparse.ArgumentParser(description="MCP Audio Client CLI")
@@ -68,6 +69,12 @@ async def run_cli():
     # Command 'take-photo'
     photo_parser = subparsers.add_parser("take-photo", help="Capture a photo from the Raspberry Pi camera")
     photo_parser.add_argument("--output", required=True, help="Path where the photo will be saved (e.g. photo.jpg)")
+
+    # Command 'record-video'
+    video_parser = subparsers.add_parser("record-video", help="Record a video from the Raspberry Pi camera")
+    video_parser.add_argument("--output", required=True, help="Path where the video will be saved (e.g. video.mp4)")
+    video_parser.add_argument("--duration", type=int, default=5, help="Recording length in seconds (1-30)")
+    video_parser.add_argument("--fps", type=int, default=10, help="Framerate in frames per second (1-30)")
 
     args = parser.parse_args()
 
@@ -135,6 +142,10 @@ async def run_cli():
         elif args.command == "take-photo":
             print("Capturing photo from Raspberry Pi camera...")
             res = await save_photo(args.output)
+            print(f"Server Response: {res}")
+        elif args.command == "record-video":
+            print(f"Recording {args.duration}s video @{args.fps}fps...")
+            res = await save_video(args.output, duration_seconds=args.duration, fps=args.fps)
             print(f"Server Response: {res}")
         else:
             parser.print_help()

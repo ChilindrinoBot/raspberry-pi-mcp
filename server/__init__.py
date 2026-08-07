@@ -22,6 +22,7 @@ from .audio import (
     get_mic_volume,
 )
 from .image import take_photo
+from .video.video import record_video
 
 __all__ = [
     "mcp", 
@@ -41,4 +42,5 @@ __all__ = [
     "get_mic_mute_state_resource",
     "get_mic_volume",
     "take_photo",
+    "record_video",
 ]
