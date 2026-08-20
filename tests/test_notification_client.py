@@ -3,7 +3,6 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from client.notification_client import list_notifications, send_notification
-from client.config import SERVER_URL
 
 
 def _make_client_mock():
@@ -26,7 +25,7 @@ class ListNotificationsClientTests(unittest.TestCase):
 
         asyncio.run(list_notifications())
 
-        MockClient.assert_called_once_with(SERVER_URL)
+        MockClient.assert_called_once()
 
     @patch("client.notification_client.Client")
     def test_returns_notification_list(self, MockClient) -> None:
@@ -62,7 +61,7 @@ class SendNotificationClientTests(unittest.TestCase):
 
         asyncio.run(send_notification())
 
-        MockClient.assert_called_once_with(SERVER_URL)
+        MockClient.assert_called_once()
 
     @patch("client.notification_client.Client")
     def test_send_notification_default(self, MockClient) -> None:

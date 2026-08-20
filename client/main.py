@@ -2,6 +2,9 @@ import asyncio
 import argparse
 import sys
 import traceback
+import httpx
+
+
 from .audio_client import play_audio_file, stop_audio
 from .notification_client import send_notification, list_notifications
 from .alarm_client import list_alarms, play_alarm
@@ -9,6 +12,35 @@ from .speaker_client import mute, unmute, set_volume, get_volume
 from .micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from .image_client import save_photo
 from .video_client import save_video
+
+
+_CONNECTION_EXCEPTIONS: tuple[type[BaseException], ...] = (
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.WriteTimeout,
+        httpx.PoolTimeout,
+        ConnectionRefusedError,
+    )
+
+_CONNECTION_EXCEPTIONS = (ConnectionRefusedError,)
+
+
+def _is_connection_error(exc: BaseException) -> bool:
+    """Recursively unwrap ExceptionGroup / __cause__ / __context__ looking for
+    any exception instance or type contained in _CONNECTION_EXCEPTIONS."""
+    if isinstance(exc, _CONNECTION_EXCEPTIONS):
+        return True
+    if isinstance(exc, BaseExceptionGroup):
+        return any(_is_connection_error(sub) for sub in exc.exceptions)
+    cause = exc.__cause__
+    if cause is not None:
+        return _is_connection_error(cause)
+    context = exc.__context__
+    if context is not None:
+        return _is_connection_error(context)
+    return False
+
 
 async def run_cli():
     parser = argparse.ArgumentParser(description="MCP Audio Client CLI")
@@ -149,18 +181,10 @@ async def run_cli():
             print(f"Server Response: {res}")
         else:
             parser.print_help()
-    except Exception as e:
+    except BaseException as e:
         from client.config import SERVER_URL
 
-        # ExceptionGroup is raised by anyio/TaskGroup on connection failures.
-        # Unwrap it to find the root cause.
-        causes: list[BaseException] = (
-            list(e.exceptions) if isinstance(e, BaseExceptionGroup) else [e]
-        )
-        is_connection_error = any(
-            isinstance(c, (ConnectionRefusedError, OSError)) for c in causes
-        )
-        if is_connection_error:
+        if _is_connection_error(e):
             print(
                 f"\nError: Cannot connect to the MCP server at {SERVER_URL}\n"
                 f"Make sure the server is running:  python -m server.main",

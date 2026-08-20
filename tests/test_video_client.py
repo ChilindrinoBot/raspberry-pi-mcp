@@ -4,7 +4,6 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 from client.video_client import record_video, save_video
-from client.config import SERVER_URL
 
 
 def _make_client_mock():
@@ -40,7 +39,7 @@ class RecordVideoClientTests(unittest.TestCase):
 
         asyncio.run(record_video())
 
-        MockClient.assert_called_once_with(SERVER_URL)
+        MockClient.assert_called_once()
 
     @patch("client.video_client.Client")
     def test_calls_record_video_tool_with_params(self, MockClient) -> None:

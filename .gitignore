@@ -23,3 +23,6 @@ image
 
 # Agents
 AGENTS.md
+
+# Secrets
+.env

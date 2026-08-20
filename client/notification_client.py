@@ -1,17 +1,18 @@
 from mcp import Client
+from .auth import HMACTransport
 from .config import SERVER_URL
 
 
 async def send_notification(random_sound: bool = False):
     """Sends a request to the server to play a notification sound."""
-    async with Client(SERVER_URL) as client:
+    async with Client(HMACTransport(SERVER_URL)) as client:
         result = await client.call_tool("notify_audio", {"random_sound": random_sound})
         return result.structured_content
 
 
 async def list_notifications():
     """Fetches the list of available notification sounds from the server resource."""
-    async with Client(SERVER_URL) as client:
+    async with Client(HMACTransport(SERVER_URL)) as client:
         result = await client.read_resource("notifications://list")
 
         if not result.contents:

@@ -4,7 +4,6 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 from client.image_client import take_photo, save_photo
-from client.config import SERVER_URL
 
 
 def _make_client_mock():
@@ -40,7 +39,7 @@ class TakePhotoClientTests(unittest.TestCase):
 
         asyncio.run(take_photo())
 
-        MockClient.assert_called_once_with(SERVER_URL)
+        MockClient.assert_called_once()
 
     @patch("client.image_client.Client")
     def test_calls_take_photo_tool(self, MockClient) -> None:

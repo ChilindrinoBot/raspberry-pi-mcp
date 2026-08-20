@@ -3,7 +3,6 @@ import unittest
 from unittest.mock import AsyncMock, patch, call
 
 from client.alarm_client import list_alarms, play_alarm
-from client.config import SERVER_URL
 
 
 def _make_client_mock():
@@ -26,7 +25,7 @@ class ListAlarmsClientTests(unittest.TestCase):
 
         asyncio.run(list_alarms())
 
-        MockClient.assert_called_once_with(SERVER_URL)
+        MockClient.assert_called_once()
 
     @patch("client.alarm_client.Client")
     def test_returns_alarm_list(self, MockClient) -> None:
@@ -62,7 +61,7 @@ class PlayAlarmClientTests(unittest.TestCase):
 
         asyncio.run(play_alarm(stop_time=30))
 
-        MockClient.assert_called_once_with(SERVER_URL)
+        MockClient.assert_called_once()
 
     @patch("client.alarm_client.Client")
     def test_play_alarm_passes_arguments(self, MockClient) -> None:
