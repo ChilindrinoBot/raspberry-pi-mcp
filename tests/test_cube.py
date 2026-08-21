@@ -6,6 +6,8 @@ from server.display.cube import (
     list_cube_images,
     _fetch_cube_space,
     get_cube_free_space,
+    _set_cube_image,
+    set_cube_image,
     CUBE_BASE_URL,
 )
 
@@ -125,6 +127,98 @@ class GetCubeFreeSpaceTests(unittest.TestCase):
         self.assertIn("Failed to fetch free space from Cube", result)
         self.assertIn("timeout", result)
         mock_fetch.assert_called_once()
+
+
+class SetCubeImageHelperTests(unittest.TestCase):
+    def test_set_request_targets_image_directory(self) -> None:
+        with patch("server.display.cube.urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value.read.return_value = b"OK"
+
+            _set_cube_image("gif1.gif")
+
+            called_url = mock_urlopen.call_args[0][0]
+            self.assertIn("/set?img=", called_url)
+            self.assertIn("/image/gif1.gif", called_url)
+
+
+class SetCubeImageTests(unittest.TestCase):
+    @patch("server.display.cube._set_cube_image", return_value="OK")
+    @patch("server.display.cube._fetch_cube_images", return_value=["gif1.gif", "image1.jpg"])
+    def test_success_when_image_exists(self, mock_images: Mock, mock_set: Mock) -> None:
+        result = set_cube_image("gif1.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Cube image set to: gif1.gif", result["message"])
+        self.assertIn("Device response: OK", result["message"])
+        mock_images.assert_called_once()
+        mock_set.assert_called_once_with("gif1.gif")
+
+    @patch("server.display.cube._set_cube_image", return_value="OK")
+    @patch("server.display.cube._fetch_cube_images", return_value=["gif1.gif", "image1.jpg"])
+    def test_strips_leading_slash_before_validating(self, mock_images: Mock, mock_set: Mock) -> None:
+        result = set_cube_image("/gif1.gif")
+
+        self.assertEqual(result["status"], "success")
+        mock_set.assert_called_once_with("gif1.gif")
+
+    @patch("server.display.cube._set_cube_image")
+    @patch("server.display.cube._fetch_cube_images", return_value=["gif1.gif", "image1.jpg"])
+    def test_rejects_image_not_in_list(self, mock_images: Mock, mock_set: Mock) -> None:
+        result = set_cube_image("unknown.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image not found on Cube", result["message"])
+        self.assertIn("unknown.gif", result["message"])
+        mock_images.assert_called_once()
+        mock_set.assert_not_called()
+
+    @patch("server.display.cube._set_cube_image", return_value="FAIL")
+    @patch("server.display.cube._fetch_cube_images", return_value=["gif1.gif"])
+    def test_rejects_cube_failure_response(self, mock_images: Mock, mock_set: Mock) -> None:
+        result = set_cube_image("gif1.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Cube refused to set image", result["message"])
+        self.assertIn("FAIL", result["message"])
+        mock_set.assert_called_once_with("gif1.gif")
+
+    @patch("server.display.cube._set_cube_image", return_value="")
+    @patch("server.display.cube._fetch_cube_images", return_value=["gif1.gif"])
+    def test_success_when_cube_responds_empty(self, mock_images: Mock, mock_set: Mock) -> None:
+        result = set_cube_image("gif1.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["message"], "Cube image set to: gif1.gif")
+
+    @patch("server.display.cube._set_cube_image", side_effect=RuntimeError("connection refused"))
+    @patch("server.display.cube._fetch_cube_images", return_value=["gif1.gif"])
+    def test_returns_error_when_set_fails(self, mock_images: Mock, mock_set: Mock) -> None:
+        result = set_cube_image("gif1.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to set image on Cube", result["message"])
+
+    @patch("server.display.cube._fetch_cube_images", side_effect=RuntimeError("timeout"))
+    def test_returns_error_when_verification_fails(self, mock_images: Mock) -> None:
+        result = set_cube_image("gif1.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to verify image availability", result["message"])
+
+    def test_returns_error_when_not_configured(self) -> None:
+        with patch("server.display.cube.CUBE_BASE_URL", ""):
+            result = set_cube_image("gif1.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("CUBE_BASE_URL is not configured", result["message"])
+
+    def test_returns_error_when_image_empty(self) -> None:
+        with patch("server.display.cube._fetch_cube_images") as mock_images:
+            result = set_cube_image("  ")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image name is required", result["message"])
+        mock_images.assert_not_called()
 
 
 if __name__ == "__main__":

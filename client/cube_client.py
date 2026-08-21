@@ -26,3 +26,10 @@ async def get_cube_free_space() -> str:
             return "No space information available for the Cube."
 
         return result.contents[0].text
+
+
+async def set_cube_image(image: str) -> dict[str, str]:
+    """Requests the server to display an image on the Cube (validated against the file list)."""
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.call_tool("set_cube_image", {"image": image})
+        return result.structured_content

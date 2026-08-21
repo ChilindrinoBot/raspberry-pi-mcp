@@ -59,6 +59,9 @@ python -m client.main list-cube-images
 # 💾 Get the free storage space on the Cube display
 python -m client.main get-cube-free-space
 
+# 🧊 Display an image on the Cube (validated, sent as /image/<name>)
+python -m client.main set-cube-image --image gif1.gif
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -75,7 +78,7 @@ from client.speaker_client import mute, unmute, set_volume, get_volume
 from client.micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from client.image_client import take_photo, save_photo
 from client.video_client import record_video, save_video
-from client.cube_client import list_cube_images, get_cube_free_space
+from client.cube_client import list_cube_images, get_cube_free_space, set_cube_image
 
 async def main():
     # 📋 List available notifications
@@ -146,6 +149,10 @@ async def main():
     # 💾 Get the free storage space on the Cube display
     cube_space = await get_cube_free_space()
     print(f"Cube space: {cube_space}")
+
+    # 🧊 Display an image on the Cube (validated, sent as /image/<name>)
+    result = await set_cube_image("gif1.gif")
+    print(f"Set Cube image: {result}")
 
     # Later, stop the playback
     await stop_audio()

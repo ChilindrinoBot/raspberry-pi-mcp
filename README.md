@@ -69,6 +69,9 @@ python -m client.main list-cube-images
 
 # 💾 Get the free storage space on the Cube display
 python -m client.main get-cube-free-space
+
+# 🧊 Display an image on the Cube (validated against the Cube file list, sent as /image/<name>)
+python -m client.main set-cube-image --image gif1.gif
 ```
 
 ## 🧪 Testing
@@ -106,6 +109,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube image list and free space resources
+│       └── cube.py     # Cube image list, free space and image-set (/image/<name>) tools
 └── tests/              # Integration tests
 ```

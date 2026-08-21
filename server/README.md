@@ -32,6 +32,7 @@ The server exposes the following MCP tools:
 | `mute_mic` | Mutes the microphone | None |
 | `unmute_mic` | Unmutes the microphone | None |
 | `set_mic_volume` | Sets the microphone volume to a level between 0 and 100 | `level` (int) |
+| `set_cube_image` | Displays an image on the Cube (URL `/set?img=/image/<name>`) after validating the image exists in the Cube's file list | `image` (str) |
 | `take_photo` | Captures a photo from the Raspberry Pi camera and returns it Base64-encoded | None |
 | `record_video` | Records a video clip and returns it Base64-encoded (clamped to 1–30 s, 1–30 fps) | `duration_seconds` (int), `fps` (int) |
 
