@@ -153,6 +153,33 @@ def get_cube_brightness() -> str:
     return f"Current Cube brightness: {brightness}"
 
 
+def _fetch_cube_current_gif() -> str:
+    """Fetch the /img.json endpoint from the Cube and return the currently displayed gif path."""
+    url = f"{CUBE_BASE_URL}/img.json"
+    data = json.loads(urllib.request.urlopen(url).read().decode())
+    return str(data["img"]).strip()
+
+
+@mcp.resource("cube://current-gif")
+def get_cube_current_gif() -> str:
+    """
+    Returns the gif currently set on the Cube display.
+    """
+    if not CUBE_BASE_URL:
+        return "CUBE_BASE_URL is not configured. Set it in the .env file."
+
+    try:
+        gif = _fetch_cube_current_gif()
+    except Exception as e:
+        return f"Failed to fetch current gif from Cube: {e}"
+
+    if not gif:
+        return "No gif is currently set on the Cube."
+
+    name = gif.removeprefix(f"{CUBE_IMAGE_DIR}/").lstrip("/")
+    return f"Current Cube gif: {name}"
+
+
 @mcp.tool()
 def turn_cube_display_off() -> dict[str, str]:
     """

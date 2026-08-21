@@ -9,6 +9,17 @@ from .auth import HMACTransport
 from .config import SERVER_URL
 
 
+async def get_cube_current_gif() -> str:
+    """Fetches the gif currently displayed on the Cube from the server resource."""
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.read_resource("cube://current-gif")
+
+        if not result.contents:
+            return "No current gif information available for the Cube."
+
+        return result.contents[0].text
+
+
 async def list_cube_gifs() -> str:
     """Fetches the list of gifs available on the Cube from the server resource."""
     async with Client(HMACTransport(SERVER_URL)) as client:

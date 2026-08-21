@@ -53,19 +53,22 @@ python -m client.main take-photo --output photo.jpg
 # 🎥 Record a 15 second video at 10 fps
 python -m client.main record-video --output video.mp4 --duration 15 --fps 10
 
-# 🧊 List images available on the Cube display
+# 🧊 Get the gif currently displayed on the Cube
+python -m client.main get-cube-gif
+
+# 📂 List images available on the Cube display
 python -m client.main list-cube-gifs
 
 # 💾 Get the free storage space on the Cube display
 python -m client.main get-cube-free-space
 
-# 🧊 Display an image on the Cube (validated, sent as /image/<name>)
+# 🖼️ Display an image on the Cube (validated, sent as /image/<name>)
 python -m client.main set-cube-gif --gif gif1.gif
 
 # 💡 Set the Cube display brightness to a specific level (0-100, default 50)
 python -m client.main set-cube-brightness --level 10
 
-# 💡 Get the current brightness level of the Cube display
+# ✨ Get the current brightness level of the Cube display
 python -m client.main get-cube-brightness
 
 # 🌙 Turn off the Cube display (brightness 0, remembers the previous level)
@@ -94,6 +97,7 @@ from client.micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic
 from client.image_client import take_photo, save_photo
 from client.video_client import record_video, save_video
 from client.cube_client import (
+    get_cube_current_gif,
     list_cube_gifs,
     get_cube_free_space,
     set_cube_gif,
@@ -165,6 +169,10 @@ async def main():
     # 🎥 Or record a video and get the raw bytes
     video = await record_video(duration_seconds=5, fps=10)
     print(f"Video format: {video['format']}, {len(video['data'])} bytes")
+
+    # 🧊 Get the gif currently displayed on the Cube
+    current_gif = await get_cube_current_gif()
+    print(f"Cube current gif: {current_gif}")
 
     # 🧊 List images available on the Cube display
     cube_gifs = await list_cube_gifs()

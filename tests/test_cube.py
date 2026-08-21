@@ -21,6 +21,8 @@ from server.display.cube import (
     get_cube_brightness,
     turn_cube_display_off,
     turn_cube_display_on,
+    _fetch_cube_current_gif,
+    get_cube_current_gif,
     _image_dimensions,
     _decode_image,
     _upload_cube_image,
@@ -278,6 +280,61 @@ class GetCubeBrightnessTests(unittest.TestCase):
         result = get_cube_brightness()
 
         self.assertIn("Failed to fetch brightness from Cube", result)
+        self.assertIn("timeout", result)
+        mock_fetch.assert_called_once()
+
+
+class FetchCubeCurrentGifTests(unittest.TestCase):
+    def test_returns_gif_path_from_device(self) -> None:
+        with patch("server.display.cube.urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value.read.return_value = b'{"img":"/image/test.gif"}'
+
+            gif = _fetch_cube_current_gif()
+
+            self.assertEqual(gif, "/image/test.gif")
+
+    def test_fetch_failure_raises(self) -> None:
+        with patch(
+            "server.display.cube.urllib.request.urlopen",
+            side_effect=ConnectionRefusedError("connection refused"),
+        ):
+            with self.assertRaises(Exception) as ctx:
+                _fetch_cube_current_gif()
+
+            self.assertIn("connection refused", str(ctx.exception))
+
+
+class GetCubeCurrentGifTests(unittest.TestCase):
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    def test_returns_current_gif_without_image_prefix(self, mock_fetch: Mock) -> None:
+        result = get_cube_current_gif()
+
+        self.assertEqual(result, "Current Cube gif: test.gif")
+        mock_fetch.assert_called_once()
+
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/other/Bomb.gif")
+    def test_keeps_paths_outside_image_dir(self, mock_fetch: Mock) -> None:
+        result = get_cube_current_gif()
+
+        self.assertEqual(result, "Current Cube gif: other/Bomb.gif")
+
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="")
+    def test_returns_no_gif_when_empty(self, mock_fetch: Mock) -> None:
+        result = get_cube_current_gif()
+
+        self.assertEqual(result, "No gif is currently set on the Cube.")
+
+    def test_returns_not_configured_when_no_base_url(self) -> None:
+        with patch("server.display.cube.CUBE_BASE_URL", ""):
+            result = get_cube_current_gif()
+
+        self.assertIn("CUBE_BASE_URL is not configured", result)
+
+    @patch("server.display.cube._fetch_cube_current_gif", side_effect=RuntimeError("timeout"))
+    def test_returns_error_on_fetch_failure(self, mock_fetch: Mock) -> None:
+        result = get_cube_current_gif()
+
+        self.assertIn("Failed to fetch current gif from Cube", result)
         self.assertIn("timeout", result)
         mock_fetch.assert_called_once()
 

@@ -13,6 +13,7 @@ from .micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volum
 from .image_client import save_photo
 from .video_client import save_video
 from .cube_client import (
+    get_cube_current_gif,
     list_cube_gifs,
     get_cube_free_space,
     set_cube_gif,
@@ -117,6 +118,9 @@ async def run_cli():
     video_parser.add_argument("--output", required=True, help="Path where the video will be saved (e.g. video.mp4)")
     video_parser.add_argument("--duration", type=int, default=5, help="Recording length in seconds (1-30)")
     video_parser.add_argument("--fps", type=int, default=10, help="Framerate in frames per second (1-30)")
+
+    # Command 'get-cube-gif'
+    subparsers.add_parser("get-cube-gif", help="Get the gif currently displayed on the Cube")
 
     # Command 'list-cube-gifs'
     subparsers.add_parser("list-cube-gifs", help="List gifs available on the Cube display")
@@ -226,6 +230,10 @@ async def run_cli():
             print(f"Recording {args.duration}s video @{args.fps}fps...")
             res = await save_video(args.output, duration_seconds=args.duration, fps=args.fps)
             print(f"Server Response: {res}")
+        elif args.command == "get-cube-gif":
+            print("Fetching current Cube gif...")
+            res = await get_cube_current_gif()
+            print(f"\n{res}")
         elif args.command == "list-cube-gifs":
             print("Fetching gifs available on the Cube...")
             res = await list_cube_gifs()

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from client.cube_client import (
+    get_cube_current_gif,
     list_cube_gifs,
     get_cube_free_space,
     set_cube_gif,
@@ -226,6 +227,56 @@ class GetCubeBrightnessClientTests(unittest.TestCase):
         result = asyncio.run(get_cube_brightness())
 
         self.assertEqual(result, "No brightness information available for the Cube.")
+
+
+class GetCubeCurrentGifClientTests(unittest.TestCase):
+    @patch("client.cube_client.Client")
+    def test_connects_to_http_server(self, MockClient) -> None:
+        """get_cube_current_gif must connect to the configured HTTP URL."""
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type(
+            "Obj", (), {"contents": [type("Obj", (), {"text": "Current Cube gif: test.gif"})()]}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(get_cube_current_gif())
+
+        MockClient.assert_called_once()
+
+    @patch("client.cube_client.Client")
+    def test_reads_current_gif_resource(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type(
+            "Obj", (), {"contents": [type("Obj", (), {"text": "Current Cube gif: test.gif"})()]}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(get_cube_current_gif())
+
+        mock_client.read_resource.assert_called_once_with("cube://current-gif")
+
+    @patch("client.cube_client.Client")
+    def test_returns_current_gif(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type(
+            "Obj", (), {"contents": [type("Obj", (), {"text": "Current Cube gif: test.gif"})()]}
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(get_cube_current_gif())
+
+        self.assertIn("Current Cube gif:", result)
+        self.assertIn("test.gif", result)
+
+    @patch("client.cube_client.Client")
+    def test_returns_no_gif_when_empty(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type("Obj", (), {"contents": []})()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(get_cube_current_gif())
+
+        self.assertEqual(result, "No current gif information available for the Cube.")
 
 
 class SetCubeBrightnessClientTests(unittest.TestCase):

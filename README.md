@@ -64,19 +64,22 @@ python -m client.main take-photo --output photo.jpg
 # 🎥 Record a 15 second video from the Raspberry Pi camera at a low framerate
 python -m client.main record-video --output video.mp4 --duration 15 --fps 10
 
-# 🧊 List gifs available on the Cube display
+# 🧊 Get the gif currently displayed on the Cube
+python -m client.main get-cube-gif
+
+# 🖼️ List gifs available on the Cube display
 python -m client.main list-cube-gifs
 
 # 💾 Get the free storage space on the Cube display
 python -m client.main get-cube-free-space
 
-# 🧊 Display a gif on the Cube (validated against the Cube file list, sent as /image/<name>)
+# 🖼️ Display a gif on the Cube (validated against the Cube file list, sent as /image/<name>)
 python -m client.main set-cube-gif --gif gif1.gif
 
 # 💡 Set the Cube display brightness to a specific level (0-100, default 50)
 python -m client.main set-cube-brightness --level 10
 
-# 💡 Get the current brightness level of the Cube display
+# ✨ Get the current brightness level of the Cube display
 python -m client.main get-cube-brightness
 
 # 🌙 Turn off the Cube display (brightness 0, remembers the previous level)
@@ -125,6 +128,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube gif list, free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off and image upload (/doUpload) tools
+│       └── cube.py     # Cube current gif (/img.json), gif list, free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off and image upload (/doUpload) tools
 └── tests/              # Integration tests
 ```

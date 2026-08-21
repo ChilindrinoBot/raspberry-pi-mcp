@@ -10,6 +10,7 @@ The **Audio & Camera Server** is an MCP-compliant server that provides low-level
 - **Hardware Control**: Mute/Unmute and volume adjustments for both speakers and microphone.
 - **Photo Capture**: Capture photos from the Raspberry Pi camera and return them Base64-encoded.
 - **Video Recording**: Record short video clips from the Raspberry Pi camera and return them Base64-encoded. Duration (1–30 s) and framerate (1–30 fps) are controllable; a low framerate keeps the payload small.
+- **Cube Current Gif**: Report the gif currently displayed on the Cube via its `/img.json` endpoint.
 - **Cube Display Listing**: List the images available on the Cube display via HTTP.
 - **Cube Storage Reporting**: Report the free and total storage space on the Cube display.
 - **Cube Brightness Control**: Set the Cube display brightness (0–100, default 50) via its `/set?brt=` endpoint and query the current level via `/brt.json`.
@@ -52,6 +53,7 @@ The server exposes the following MCP resources:
 - `speaker://volume`: Returns the current audio output volume level (0-100) as text, e.g. `Current volume: 75%`.
 - `micphone://mute-state`: Returns the current microphone mute state as text, e.g. `Microphone is muted.` or `Microphone is unmuted.`.
 - `micphone://volume`: Returns the current microphone volume level (0-100) as text, e.g. `Current microphone volume: 75%`.
+- `cube://current-gif`: Returns the gif currently displayed on the Cube as text, e.g. `Current Cube gif: test.gif`.
 - `cube://images`: Returns a text list of the images currently available on the Cube display.
 - `cube://free-space`: Returns the free storage space on the Cube display in KB, e.g. `Free space on Cube: 903 KB (total: 3048 KB)`.
 - `cube://brightness`: Returns the current brightness level of the Cube display (0-100) as text, e.g. `Current Cube brightness: 10`.
