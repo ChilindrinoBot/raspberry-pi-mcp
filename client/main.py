@@ -12,7 +12,7 @@ from .speaker_client import mute, unmute, set_volume, get_volume
 from .micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from .image_client import save_photo
 from .video_client import save_video
-from .cube_client import list_cube_images, get_cube_free_space, set_cube_image
+from .cube_client import list_cube_gifs, get_cube_free_space, set_cube_gif
 
 
 _CONNECTION_EXCEPTIONS: tuple[type[BaseException], ...] = (
@@ -109,15 +109,15 @@ async def run_cli():
     video_parser.add_argument("--duration", type=int, default=5, help="Recording length in seconds (1-30)")
     video_parser.add_argument("--fps", type=int, default=10, help="Framerate in frames per second (1-30)")
 
-    # Command 'list-cube-images'
-    subparsers.add_parser("list-cube-images", help="List images available on the Cube display")
+    # Command 'list-cube-gifs'
+    subparsers.add_parser("list-cube-gifs", help="List gifs available on the Cube display")
 
     # Command 'get-cube-free-space'
     subparsers.add_parser("get-cube-free-space", help="Get the free storage space on the Cube display")
 
-    # Command 'set-cube-image'
-    cube_image_parser = subparsers.add_parser("set-cube-image", help="Display an image on the Cube display")
-    cube_image_parser.add_argument("--image", required=True, help="Image name or path available on the Cube")
+    # Command 'set-cube-gif'
+    cube_image_parser = subparsers.add_parser("set-cube-gif", help="Display a gif on the Cube display")
+    cube_image_parser.add_argument("--gif", required=True, help="Gif name or path available on the Cube")
 
     args = parser.parse_args()
 
@@ -190,17 +190,17 @@ async def run_cli():
             print(f"Recording {args.duration}s video @{args.fps}fps...")
             res = await save_video(args.output, duration_seconds=args.duration, fps=args.fps)
             print(f"Server Response: {res}")
-        elif args.command == "list-cube-images":
-            print("Fetching images available on the Cube...")
-            res = await list_cube_images()
+        elif args.command == "list-cube-gifs":
+            print("Fetching gifs available on the Cube...")
+            res = await list_cube_gifs()
             print(f"\n{res}")
         elif args.command == "get-cube-free-space":
             print("Fetching free space on the Cube...")
             res = await get_cube_free_space()
             print(f"\n{res}")
-        elif args.command == "set-cube-image":
-            print(f"Setting Cube image to {args.image}...")
-            res = await set_cube_image(args.image)
+        elif args.command == "set-cube-gif":
+            print(f"Setting Cube gif to {args.gif}...")
+            res = await set_cube_gif(args.gif)
             print(f"Server Response: {res}")
         else:
             parser.print_help()
