@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 from mcp import Client
 
 from .auth import HMACTransport
@@ -64,4 +67,27 @@ async def turn_cube_display_on() -> dict[str, str]:
     """Requests the server to turn on the Cube display (restores the remembered brightness, default 50)."""
     async with Client(HMACTransport(SERVER_URL)) as client:
         result = await client.call_tool("turn_cube_display_on", {})
+        return result.structured_content
+
+
+def _encode_image(data: bytes) -> str:
+    """Encode raw image bytes in Base64 for the server."""
+    return base64.b64encode(data).decode()
+
+
+async def upload_cube_image(file_path: str) -> dict[str, str]:
+    """Uploads a local gif/jpg image (240x240) to the Cube display.
+
+    The file is read locally, Base64-encoded and sent to the server without
+    any filesystem path.
+    """
+    path = Path(file_path.strip())
+    data = path.read_bytes()
+    encoded = _encode_image(data)
+
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.call_tool(
+            "upload_cube_image",
+            {"data": encoded, "filename": path.name},
+        )
         return result.structured_content

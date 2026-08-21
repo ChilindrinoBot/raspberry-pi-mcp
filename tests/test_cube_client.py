@@ -1,5 +1,8 @@
 import asyncio
+import base64
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from client.cube_client import (
@@ -10,6 +13,7 @@ from client.cube_client import (
     get_cube_brightness,
     turn_cube_display_off,
     turn_cube_display_on,
+    upload_cube_image,
 )
 
 
@@ -389,6 +393,80 @@ class TurnCubeDisplayOnClientTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertIn("Failed to turn on Cube display", result["message"])
+
+
+class UploadCubeImageClientTests(unittest.TestCase):
+    GIF_DATA = b"GIF89a" + (240).to_bytes(2, "little") + (240).to_bytes(2, "little") + b"\x00\x00\x00"
+
+    def _write_temp_gif(self) -> Path:
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        path = Path(tmp_dir.name) / "bomb.gif"
+        path.write_bytes(self.GIF_DATA)
+        return path
+
+    @patch("client.cube_client.Client")
+    def test_connects_to_http_server(self, MockClient) -> None:
+        """upload_cube_image must connect to the configured HTTP URL."""
+        path = self._write_temp_gif()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Image uploaded to Cube: bomb.gif"}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(upload_cube_image(str(path)))
+
+        MockClient.assert_called_once()
+
+    @patch("client.cube_client.Client")
+    def test_sends_base64_data_and_filename_without_path(self, MockClient) -> None:
+        path = self._write_temp_gif()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Image uploaded to Cube: bomb.gif"}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(upload_cube_image(str(path)))
+
+        args = mock_client.call_tool.call_args[0][1]
+        self.assertEqual(args["filename"], "bomb.gif")
+        self.assertNotIn(str(path), args["data"])
+        # The sent payload must decode back to the original file bytes.
+        self.assertEqual(base64.b64decode(args["data"]), self.GIF_DATA)
+
+    @patch("client.cube_client.Client")
+    def test_returns_success(self, MockClient) -> None:
+        path = self._write_temp_gif()
+        ctx, mock_client = _make_client_mock()
+        expected = {"status": "success", "message": "Image uploaded to Cube: bomb.gif"}
+        mock_client.call_tool.return_value = type("Obj", (), {"structured_content": expected})()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(upload_cube_image(str(path)))
+
+        self.assertEqual(result, expected)
+
+    @patch("client.cube_client.Client")
+    def test_returns_when_server_rejects(self, MockClient) -> None:
+        path = self._write_temp_gif()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj",
+            (),
+            {"structured_content": {"status": "error", "message": "Image must be 240x240 (got 100x100): bomb.gif."}},
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(upload_cube_image(str(path)))
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image must be 240x240", result["message"])
+
+    def test_raises_when_file_missing(self) -> None:
+        with self.assertRaises(OSError):
+            asyncio.run(upload_cube_image("/nonexistent/path/bomb.gif"))
 
 
 if __name__ == "__main__":

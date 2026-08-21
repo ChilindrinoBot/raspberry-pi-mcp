@@ -74,6 +74,9 @@ python -m client.main turn-cube-off
 # ☀️ Turn on the Cube display (restores the remembered brightness, default 50)
 python -m client.main turn-cube-on
 
+# 📤 Upload a gif/jpg image (must be 240x240) to the Cube display (sent Base64-encoded)
+python -m client.main upload-cube-gif --file path/to/image.gif
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -98,6 +101,7 @@ from client.cube_client import (
     get_cube_brightness,
     turn_cube_display_off,
     turn_cube_display_on,
+    upload_cube_image,
 )
 
 async def main():
@@ -189,6 +193,12 @@ async def main():
     # ☀️ Turn on the Cube display (restores the remembered level, default 50)
     result = await turn_cube_display_on()
     print(f"Cube display on: {result}")
+
+    # 📤 Upload a gif/jpg image (must be 240x240) to the Cube display.
+    # The file is read locally, Base64-encoded and sent to the server
+    # without any filesystem path.
+    result = await upload_cube_image("path/to/image.gif")
+    print(f"Upload: {result}")
 
     # Later, stop the playback
     await stop_audio()

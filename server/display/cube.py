@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
 import urllib.parse
 import urllib.request
+from io import BytesIO
 from pathlib import Path
 from typing import Final
 
+import httpx
 from dotenv import load_dotenv
+from PIL import Image
 
 from .. import mcp
 
@@ -28,6 +32,10 @@ BRIGHTNESS_MAX: Final[int] = 100
 # Brightness level remembered when the display is turned off, so it can be
 # restored on the next power on. None means nothing has been remembered yet.
 _REMEMBERED_BRIGHTNESS: int | None = None
+
+CUBE_IMAGE_DIR: Final[str] = "/image"
+ALLOWED_UPLOAD_SUFFIXES: Final[frozenset[str]] = frozenset({".gif", ".jpg", ".jpeg"})
+IMAGE_REQUIRED_DIMENSIONS: Final[tuple[int, int]] = (240, 240)
 
 
 def _fetch_cube_gifs() -> list[str]:
@@ -283,3 +291,121 @@ def set_cube_gif(gif: str) -> dict[str, str]:
         "status": "success",
         "message": f"Cube gif set to: {gif}. Device response: {response}",
     }
+
+
+def _image_dimensions(data: bytes) -> tuple[int, int] | None:
+    """Return the (width, height) of an image, or None if it cannot be determined."""
+    try:
+        with Image.open(BytesIO(data)) as img:
+            return img.size
+    except Exception:
+        return None
+
+
+def _upload_cube_image(name: str, data: bytes) -> None:
+    """POST an image to the Cube's /doUpload endpoint as multipart/form-data.
+
+    Mirrors the device's web uploader: gifs are sent in the "image" field while
+    jpg/jpeg files are sent in the "file" field, always targeting the /image dir.
+    """
+    field = "image" if name.lower().endswith(".gif") else "file"
+    url = f"{CUBE_BASE_URL}/doUpload?dir={CUBE_IMAGE_DIR}"
+    response = httpx.post(url, files={field: (name, data)}, timeout=60)
+    response.raise_for_status()
+
+
+def _is_in_cube_filelist(name: str, entries: list[str]) -> bool:
+    """Check whether an uploaded file shows up in the Cube file list."""
+    lowered = name.lower()
+    return any(
+        entry.lower() == lowered or entry.lower().endswith(f"/{lowered}")
+        for entry in entries
+    )
+
+
+def _decode_image(data: str) -> bytes:
+    """Decode a Base64-encoded image payload into raw bytes."""
+    return base64.b64decode(data, validate=True)
+
+
+@mcp.tool()
+def upload_cube_image(data: str, filename: str) -> dict[str, str]:
+    """
+    Uploads a gif or jpg/jpeg image to the Cube display.
+
+    The image bytes must be Base64-encoded by the client. After decoding, the
+    file is validated: allowed extension (.gif, .jpg, .jpeg), dimensions
+    exactly 240x240, and enough free space on the Cube before uploading it to
+    the /image directory via /doUpload.
+
+    Args:
+        data: Image bytes encoded in Base64 (client-side).
+        filename: Name of the image, used to determine its type.
+    """
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    name = Path(filename.strip()).name
+    if not name:
+        return {"status": "error", "message": "Filename is required."}
+
+    suffix = Path(name).suffix.lower()
+    if suffix not in ALLOWED_UPLOAD_SUFFIXES:
+        return {
+            "status": "error",
+            "message": f"Unsupported file type: {suffix or 'none'}. Allowed: .gif, .jpg, .jpeg.",
+        }
+
+    try:
+        payload = _decode_image(data)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to decode image {name}: {e}"}
+
+    if not payload:
+        return {"status": "error", "message": f"Image is empty: {name}."}
+
+    dimensions = _image_dimensions(payload)
+    if dimensions is None:
+        return {"status": "error", "message": f"Could not read image dimensions of {name}."}
+
+    if dimensions != IMAGE_REQUIRED_DIMENSIONS:
+        width, height = dimensions
+        return {
+            "status": "error",
+            "message": (
+                f"Image must be {IMAGE_REQUIRED_DIMENSIONS[0]}x{IMAGE_REQUIRED_DIMENSIONS[1]} "
+                f"(got {width}x{height}): {name}."
+            ),
+        }
+
+    try:
+        free, _total = _fetch_cube_space()
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to check free space on Cube: {e}"}
+
+    if len(payload) > free:
+        return {
+            "status": "error",
+            "message": (
+                f"Not enough space on Cube: file needs {len(payload)} bytes "
+                f"but only {free} bytes are free."
+            ),
+        }
+
+    try:
+        _upload_cube_image(name, payload)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to upload image to Cube: {e}"}
+
+    try:
+        available = _fetch_cube_gifs()
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to verify upload of {name} on Cube: {e}"}
+
+    if not _is_in_cube_filelist(name, available):
+        return {
+            "status": "error",
+            "message": f"Upload could not be confirmed: {name} is not in the Cube file list.",
+        }
+
+    return {"status": "success", "message": f"Image uploaded to Cube: {name}"}

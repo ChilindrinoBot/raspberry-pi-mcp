@@ -20,6 +20,7 @@ from .cube_client import (
     get_cube_brightness,
     turn_cube_display_off,
     turn_cube_display_on,
+    upload_cube_image,
 )
 
 
@@ -148,6 +149,12 @@ async def run_cli():
         "turn-cube-on", help="Turn on the Cube display (restores remembered brightness, default 50)"
     )
 
+    # Command 'upload-cube-gif'
+    cube_upload_parser = subparsers.add_parser(
+        "upload-cube-gif", help="Upload a gif/jpg image (240x240) to the Cube display"
+    )
+    cube_upload_parser.add_argument("--file", required=True, help="Local path of the gif or jpg/jpeg image to upload")
+
     args = parser.parse_args()
 
     try:
@@ -246,6 +253,10 @@ async def run_cli():
         elif args.command == "turn-cube-on":
             print("Turning on the Cube display...")
             res = await turn_cube_display_on()
+            print(f"Server Response: {res}")
+        elif args.command == "upload-cube-gif":
+            print(f"Uploading {args.file} to the Cube...")
+            res = await upload_cube_image(args.file)
             print(f"Server Response: {res}")
         else:
             parser.print_help()

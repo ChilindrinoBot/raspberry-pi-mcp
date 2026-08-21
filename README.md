@@ -84,6 +84,9 @@ python -m client.main turn-cube-off
 
 # ☀️ Turn on the Cube display (restores the remembered brightness, default 50)
 python -m client.main turn-cube-on
+
+# 📤 Upload a gif/jpg image (must be 240x240) to the Cube display (sent Base64-encoded)
+python -m client.main upload-cube-gif --file path/to/image.gif
 ```
 
 ## 🧪 Testing
@@ -100,6 +103,7 @@ python -m unittest discover tests
 - **Language:** Python 3.11+
 - **Protocol:** Model Context Protocol (MCP)
 - **Audio Backend:** `ffplay` (FFmpeg)
+- **Image Validation:** Pillow
 - **Package Management:** `uv` / `pyproject.toml`
 
 ## 📁 Project Structure
@@ -121,6 +125,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube gif list, free space, gif-set (/image/<name>) and brightness (/set?brt=, /brt.json) tools
+│       └── cube.py     # Cube gif list, free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off and image upload (/doUpload) tools
 └── tests/              # Integration tests
 ```
