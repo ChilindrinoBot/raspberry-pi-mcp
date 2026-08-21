@@ -56,6 +56,9 @@ python -m client.main record-video --output video.mp4 --duration 15 --fps 10
 # 🧊 List images available on the Cube display
 python -m client.main list-cube-images
 
+# 💾 Get the free storage space on the Cube display
+python -m client.main get-cube-free-space
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -72,7 +75,7 @@ from client.speaker_client import mute, unmute, set_volume, get_volume
 from client.micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from client.image_client import take_photo, save_photo
 from client.video_client import record_video, save_video
-from client.cube_client import list_cube_images
+from client.cube_client import list_cube_images, get_cube_free_space
 
 async def main():
     # 📋 List available notifications
@@ -139,6 +142,10 @@ async def main():
     # 🧊 List images available on the Cube display
     cube_images = await list_cube_images()
     print(f"Cube images:\n{cube_images}")
+
+    # 💾 Get the free storage space on the Cube display
+    cube_space = await get_cube_free_space()
+    print(f"Cube space: {cube_space}")
 
     # Later, stop the playback
     await stop_audio()

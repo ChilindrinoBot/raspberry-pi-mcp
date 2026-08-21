@@ -12,7 +12,7 @@ from .speaker_client import mute, unmute, set_volume, get_volume
 from .micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from .image_client import save_photo
 from .video_client import save_video
-from .cube_client import list_cube_images
+from .cube_client import list_cube_images, get_cube_free_space
 
 
 _CONNECTION_EXCEPTIONS: tuple[type[BaseException], ...] = (
@@ -112,6 +112,9 @@ async def run_cli():
     # Command 'list-cube-images'
     subparsers.add_parser("list-cube-images", help="List images available on the Cube display")
 
+    # Command 'get-cube-free-space'
+    subparsers.add_parser("get-cube-free-space", help="Get the free storage space on the Cube display")
+
     args = parser.parse_args()
 
     try:
@@ -186,6 +189,10 @@ async def run_cli():
         elif args.command == "list-cube-images":
             print("Fetching images available on the Cube...")
             res = await list_cube_images()
+            print(f"\n{res}")
+        elif args.command == "get-cube-free-space":
+            print("Fetching free space on the Cube...")
+            res = await get_cube_free_space()
             print(f"\n{res}")
         else:
             parser.print_help()

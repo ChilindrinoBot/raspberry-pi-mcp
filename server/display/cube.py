@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import urllib.request
@@ -45,3 +46,26 @@ def list_cube_images() -> str:
         return "No images found on the Cube."
 
     return "Available Cube images:\n" + "\n".join(images)
+
+
+def _fetch_cube_space() -> tuple[int, int]:
+    """Fetch the /space.json endpoint from the Cube and return (free, total) bytes."""
+    url = f"{CUBE_BASE_URL}/space.json"
+    data = json.loads(urllib.request.urlopen(url).read().decode())
+    return int(data["free"]), int(data["total"])
+
+
+@mcp.resource("cube://free-space")
+def get_cube_free_space() -> str:
+    """
+    Returns the free storage space available on the Cube display.
+    """
+    if not CUBE_BASE_URL:
+        return "CUBE_BASE_URL is not configured. Set it in the .env file."
+
+    try:
+        free, total = _fetch_cube_space()
+    except Exception as e:
+        return f"Failed to fetch free space from Cube: {e}"
+
+    return f"Free space on Cube: {free // 1024} KB (total: {total // 1024} KB)"

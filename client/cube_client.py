@@ -15,3 +15,14 @@ async def list_cube_images() -> str:
             return "No images found on the Cube."
 
         return result.contents[0].text
+
+
+async def get_cube_free_space() -> str:
+    """Fetches the free storage space available on the Cube from the server resource."""
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.read_resource("cube://free-space")
+
+        if not result.contents:
+            return "No space information available for the Cube."
+
+        return result.contents[0].text

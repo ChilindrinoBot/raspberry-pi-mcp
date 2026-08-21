@@ -66,6 +66,9 @@ python -m client.main record-video --output video.mp4 --duration 15 --fps 10
 
 # 🧊 List images available on the Cube display
 python -m client.main list-cube-images
+
+# 💾 Get the free storage space on the Cube display
+python -m client.main get-cube-free-space
 ```
 
 ## 🧪 Testing
@@ -102,7 +105,7 @@ python -m unittest discover tests
 │   │   └── micphone.py # Microphone mute/unmute and volume control
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
-│   └── display/        # Cube display image listing
-│       └── cube.py     # Cube image list resource
+│   └── display/        # Cube display image and storage info
+│       └── cube.py     # Cube image list and free space resources
 └── tests/              # Integration tests
 ```
