@@ -6,13 +6,13 @@ from .auth import HMACTransport
 from .config import SERVER_URL
 
 
-async def list_cube_images() -> str:
-    """Fetches the list of images available on the Cube from the server resource."""
+async def list_cube_gifs() -> str:
+    """Fetches the list of gifs available on the Cube from the server resource."""
     async with Client(HMACTransport(SERVER_URL)) as client:
-        result = await client.read_resource("cube://images")
+        result = await client.read_resource("cube://gifs")
 
         if not result.contents:
-            return "No images found on the Cube."
+            return "No gifs found on the Cube."
 
         return result.contents[0].text
 
@@ -28,8 +28,8 @@ async def get_cube_free_space() -> str:
         return result.contents[0].text
 
 
-async def set_cube_image(image: str) -> dict[str, str]:
-    """Requests the server to display an image on the Cube (validated against the file list)."""
+async def set_cube_gif(gif: str) -> dict[str, str]:
+    """Requests the server to display a gif on the Cube (validated against the file list)."""
     async with Client(HMACTransport(SERVER_URL)) as client:
-        result = await client.call_tool("set_cube_image", {"image": image})
+        result = await client.call_tool("set_cube_gif", {"gif": gif})
         return result.structured_content

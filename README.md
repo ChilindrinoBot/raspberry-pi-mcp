@@ -64,14 +64,14 @@ python -m client.main take-photo --output photo.jpg
 # 🎥 Record a 15 second video from the Raspberry Pi camera at a low framerate
 python -m client.main record-video --output video.mp4 --duration 15 --fps 10
 
-# 🧊 List images available on the Cube display
-python -m client.main list-cube-images
+# 🧊 List gifs available on the Cube display
+python -m client.main list-cube-gifs
 
 # 💾 Get the free storage space on the Cube display
 python -m client.main get-cube-free-space
 
-# 🧊 Display an image on the Cube (validated against the Cube file list, sent as /image/<name>)
-python -m client.main set-cube-image --image gif1.gif
+# 🧊 Display a gif on the Cube (validated against the Cube file list, sent as /image/<name>)
+python -m client.main set-cube-gif --gif gif1.gif
 ```
 
 ## 🧪 Testing
@@ -109,6 +109,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube image list, free space and image-set (/image/<name>) tools
+│       └── cube.py     # Cube gif list, free space and gif-set (/image/<name>) tools
 └── tests/              # Integration tests
 ```

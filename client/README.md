@@ -54,13 +54,13 @@ python -m client.main take-photo --output photo.jpg
 python -m client.main record-video --output video.mp4 --duration 15 --fps 10
 
 # 🧊 List images available on the Cube display
-python -m client.main list-cube-images
+python -m client.main list-cube-gifs
 
 # 💾 Get the free storage space on the Cube display
 python -m client.main get-cube-free-space
 
 # 🧊 Display an image on the Cube (validated, sent as /image/<name>)
-python -m client.main set-cube-image --image gif1.gif
+python -m client.main set-cube-gif --gif gif1.gif
 
 # 🛑 Stop the server from playing audio
 python -m client.main stop
@@ -78,7 +78,7 @@ from client.speaker_client import mute, unmute, set_volume, get_volume
 from client.micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from client.image_client import take_photo, save_photo
 from client.video_client import record_video, save_video
-from client.cube_client import list_cube_images, get_cube_free_space, set_cube_image
+from client.cube_client import list_cube_gifs, get_cube_free_space, set_cube_gif
 
 async def main():
     # 📋 List available notifications
@@ -143,16 +143,16 @@ async def main():
     print(f"Video format: {video['format']}, {len(video['data'])} bytes")
 
     # 🧊 List images available on the Cube display
-    cube_images = await list_cube_images()
-    print(f"Cube images:\n{cube_images}")
+    cube_gifs = await list_cube_gifs()
+    print(f"Cube gifs:\n{cube_gifs}")
 
     # 💾 Get the free storage space on the Cube display
     cube_space = await get_cube_free_space()
     print(f"Cube space: {cube_space}")
 
     # 🧊 Display an image on the Cube (validated, sent as /image/<name>)
-    result = await set_cube_image("gif1.gif")
-    print(f"Set Cube image: {result}")
+    result = await set_cube_gif("gif1.gif")
+    print(f"Set Cube gif: {result}")
 
     # Later, stop the playback
     await stop_audio()

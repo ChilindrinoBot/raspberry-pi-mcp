@@ -21,7 +21,7 @@ from .audio import (
     get_mic_mute_state_resource,
     get_mic_volume,
 )
-from .display import list_cube_images, get_cube_free_space, set_cube_image
+from .display import list_cube_gifs, get_cube_free_space, set_cube_gif
 from .image import take_photo
 from .video.video import record_video
 
@@ -42,9 +42,9 @@ __all__ = [
     "set_mic_volume",
     "get_mic_mute_state_resource",
     "get_mic_volume",
-    "list_cube_images",
+    "list_cube_gifs",
     "get_cube_free_space",
-    "set_cube_image",
+    "set_cube_gif",
     "take_photo",
     "record_video",
 ]
