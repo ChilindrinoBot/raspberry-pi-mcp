@@ -62,6 +62,9 @@ python -m client.main get-cube-free-space
 # 🧊 Display an image on the Cube (validated, sent as /image/<name>)
 python -m client.main set-cube-gif --gif gif1.gif
 
+# 💡 Set the Cube display brightness to a specific level (0-100, default 50)
+python -m client.main set-cube-brightness --level 10
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -78,7 +81,7 @@ from client.speaker_client import mute, unmute, set_volume, get_volume
 from client.micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from client.image_client import take_photo, save_photo
 from client.video_client import record_video, save_video
-from client.cube_client import list_cube_gifs, get_cube_free_space, set_cube_gif
+from client.cube_client import list_cube_gifs, get_cube_free_space, set_cube_gif, set_cube_brightness
 
 async def main():
     # 📋 List available notifications
@@ -153,6 +156,10 @@ async def main():
     # 🧊 Display an image on the Cube (validated, sent as /image/<name>)
     result = await set_cube_gif("gif1.gif")
     print(f"Set Cube gif: {result}")
+
+    # 💡 Set the Cube display brightness to 10% (0-100, default 50)
+    result = await set_cube_brightness(10)
+    print(f"Set Cube brightness: {result}")
 
     # Later, stop the playback
     await stop_audio()

@@ -12,7 +12,7 @@ from .speaker_client import mute, unmute, set_volume, get_volume
 from .micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from .image_client import save_photo
 from .video_client import save_video
-from .cube_client import list_cube_gifs, get_cube_free_space, set_cube_gif
+from .cube_client import list_cube_gifs, get_cube_free_space, set_cube_gif, set_cube_brightness
 
 
 _CONNECTION_EXCEPTIONS: tuple[type[BaseException], ...] = (
@@ -119,6 +119,14 @@ async def run_cli():
     cube_image_parser = subparsers.add_parser("set-cube-gif", help="Display a gif on the Cube display")
     cube_image_parser.add_argument("--gif", required=True, help="Gif name or path available on the Cube")
 
+    # Command 'set-cube-brightness'
+    cube_brightness_parser = subparsers.add_parser(
+        "set-cube-brightness", help="Set the Cube display brightness level (0-100)"
+    )
+    cube_brightness_parser.add_argument(
+        "--level", type=int, default=50, help="Brightness level (0-100, default: 50)"
+    )
+
     args = parser.parse_args()
 
     try:
@@ -201,6 +209,10 @@ async def run_cli():
         elif args.command == "set-cube-gif":
             print(f"Setting Cube gif to {args.gif}...")
             res = await set_cube_gif(args.gif)
+            print(f"Server Response: {res}")
+        elif args.command == "set-cube-brightness":
+            print(f"Setting Cube brightness to {args.level}...")
+            res = await set_cube_brightness(args.level)
             print(f"Server Response: {res}")
         else:
             parser.print_help()

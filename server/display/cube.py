@@ -21,6 +21,10 @@ CUBE_BASE_URL: Final[str] = os.environ.get("CUBE_BASE_URL", "").rstrip("/")
 
 _HREF_PATTERN: Final[re.Pattern[str]] = re.compile(r"href='([^']+)'")
 
+BRIGHTNESS_DEFAULT: Final[int] = 50
+BRIGHTNESS_MIN: Final[int] = 0
+BRIGHTNESS_MAX: Final[int] = 100
+
 
 def _fetch_cube_gifs() -> list[str]:
     """Fetch the /filelist page from the Cube and extract the available gif paths."""
@@ -70,6 +74,48 @@ def get_cube_free_space() -> str:
         return f"Failed to fetch free space from Cube: {e}"
 
     return f"Free space on Cube: {free // 1024} KB (total: {total // 1024} KB)"
+
+
+def _set_cube_brightness(level: int) -> str:
+    """Send a /set?brt=<level> request to the Cube, returning the response body."""
+    url = f"{CUBE_BASE_URL}/set?brt={level}"
+    return urllib.request.urlopen(url).read().decode().strip()
+
+
+@mcp.tool()
+def set_cube_brightness(level: int = BRIGHTNESS_DEFAULT) -> dict[str, str]:
+    """
+    Sets the brightness of the Cube display.
+
+    The level is clamped to the valid range [0, 100] before being sent to the
+    Cube via its /set?brt= endpoint.
+
+    Args:
+        level: Brightness level between 0 and 100 (default: 50).
+    """
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    clamped = max(BRIGHTNESS_MIN, min(BRIGHTNESS_MAX, level))
+
+    try:
+        response = _set_cube_brightness(clamped)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to set brightness on Cube: {e}"}
+
+    if "FAIL" in response.upper():
+        return {
+            "status": "error",
+            "message": f"Cube refused to set brightness {clamped}. Response: {response}",
+        }
+
+    if not response:
+        return {"status": "success", "message": f"Cube brightness set to: {clamped}"}
+
+    return {
+        "status": "success",
+        "message": f"Cube brightness set to: {clamped}. Device response: {response}",
+    }
 
 
 def _set_cube_gif(gif: str) -> str:

@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from server.display.cube import (
     _fetch_cube_gifs,
@@ -8,6 +8,9 @@ from server.display.cube import (
     get_cube_free_space,
     _set_cube_gif,
     set_cube_gif,
+    _set_cube_brightness,
+    set_cube_brightness,
+    BRIGHTNESS_DEFAULT,
     CUBE_BASE_URL,
 )
 
@@ -218,6 +221,103 @@ class SetCubeGifTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("Gif name is required", result["message"])
         mock_gifs.assert_not_called()
+
+
+class SetCubeBrightnessHelperTests(unittest.TestCase):
+    def test_set_request_targets_brightness_endpoint(self) -> None:
+        with patch("server.display.cube.urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value.read.return_value = b"OK"
+
+            _set_cube_brightness(10)
+
+            called_url = mock_urlopen.call_args[0][0]
+            self.assertIn("/set?brt=10", called_url)
+
+    def test_fetch_failure_raises(self) -> None:
+        with patch(
+            "server.display.cube.urllib.request.urlopen",
+            side_effect=ConnectionRefusedError("connection refused"),
+        ):
+            with self.assertRaises(Exception) as ctx:
+                _set_cube_brightness(50)
+
+            self.assertIn("connection refused", str(ctx.exception))
+
+
+class SetCubeBrightnessTests(unittest.TestCase):
+    @patch("server.display.cube._set_cube_brightness", return_value="OK")
+    def test_success_with_device_response(self, mock_set: Mock) -> None:
+        result = set_cube_brightness(75)
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Cube brightness set to: 75", result["message"])
+        self.assertIn("Device response: OK", result["message"])
+        mock_set.assert_called_once_with(75)
+
+    @patch("server.display.cube._set_cube_brightness", return_value="")
+    def test_success_when_cube_responds_empty(self, mock_set: Mock) -> None:
+        result = set_cube_brightness(30)
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["message"], "Cube brightness set to: 30")
+
+    @patch("server.display.cube._set_cube_brightness", return_value="OK")
+    def test_defaults_to_50_when_no_level_given(self, mock_set: Mock) -> None:
+        result = set_cube_brightness()
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Cube brightness set to: 50", result["message"])
+        mock_set.assert_called_once_with(BRIGHTNESS_DEFAULT)
+        self.assertEqual(BRIGHTNESS_DEFAULT, 50)
+
+    @patch("server.display.cube._set_cube_brightness", return_value="OK")
+    def test_clamps_level_below_zero_to_zero(self, mock_set: Mock) -> None:
+        result = set_cube_brightness(-5)
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Cube brightness set to: 0", result["message"])
+        mock_set.assert_called_once_with(0)
+
+    @patch("server.display.cube._set_cube_brightness", return_value="OK")
+    def test_clamps_level_above_hundred_to_hundred(self, mock_set: Mock) -> None:
+        result = set_cube_brightness(150)
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Cube brightness set to: 100", result["message"])
+        mock_set.assert_called_once_with(100)
+
+    @patch("server.display.cube._set_cube_brightness", return_value="OK")
+    def test_accepts_boundary_levels(self, mock_set: Mock) -> None:
+        result_min = set_cube_brightness(0)
+        result_max = set_cube_brightness(100)
+
+        self.assertEqual(result_min["status"], "success")
+        self.assertEqual(result_max["status"], "success")
+        mock_set.assert_has_calls([call(0), call(100)])
+
+    @patch("server.display.cube._set_cube_brightness", return_value="FAIL")
+    def test_rejects_cube_failure_response(self, mock_set: Mock) -> None:
+        result = set_cube_brightness(20)
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Cube refused to set brightness", result["message"])
+        self.assertIn("FAIL", result["message"])
+        mock_set.assert_called_once_with(20)
+
+    @patch("server.display.cube._set_cube_brightness", side_effect=RuntimeError("connection refused"))
+    def test_returns_error_when_set_fails(self, mock_set: Mock) -> None:
+        result = set_cube_brightness(60)
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to set brightness on Cube", result["message"])
+        self.assertIn("connection refused", result["message"])
+
+    def test_returns_error_when_not_configured(self) -> None:
+        with patch("server.display.cube.CUBE_BASE_URL", ""):
+            result = set_cube_brightness(40)
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("CUBE_BASE_URL is not configured", result["message"])
 
 
 if __name__ == "__main__":

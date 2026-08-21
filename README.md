@@ -72,6 +72,9 @@ python -m client.main get-cube-free-space
 
 # 🧊 Display a gif on the Cube (validated against the Cube file list, sent as /image/<name>)
 python -m client.main set-cube-gif --gif gif1.gif
+
+# 💡 Set the Cube display brightness to a specific level (0-100, default 50)
+python -m client.main set-cube-brightness --level 10
 ```
 
 ## 🧪 Testing
@@ -109,6 +112,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube gif list, free space and gif-set (/image/<name>) tools
+│       └── cube.py     # Cube gif list, free space, gif-set (/image/<name>) and brightness (/set?brt=) tools
 └── tests/              # Integration tests
 ```

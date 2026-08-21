@@ -12,6 +12,7 @@ The **Audio & Camera Server** is an MCP-compliant server that provides low-level
 - **Video Recording**: Record short video clips from the Raspberry Pi camera and return them Base64-encoded. Duration (1–30 s) and framerate (1–30 fps) are controllable; a low framerate keeps the payload small.
 - **Cube Display Listing**: List the images available on the Cube display via HTTP.
 - **Cube Storage Reporting**: Report the free and total storage space on the Cube display.
+- **Cube Brightness Control**: Set the Cube display brightness (0–100, default 50) via its `/set?brt=` endpoint.
 - **System Awareness**: Detects if `ffplay` is already running to prevent overlapping audio.
 - **Async Execution**: Audio is played in the background to keep the server responsive.
 
@@ -33,6 +34,7 @@ The server exposes the following MCP tools:
 | `unmute_mic` | Unmutes the microphone | None |
 | `set_mic_volume` | Sets the microphone volume to a level between 0 and 100 | `level` (int) |
 | `set_cube_image` | Displays an image on the Cube (URL `/set?img=/image/<name>`) after validating the image exists in the Cube's file list | `image` (str) |
+| `set_cube_brightness` | Sets the Cube display brightness via URL `/set?brt=<level>` (clamped to 0–100, default 50) | `level` (int, optional) |
 | `take_photo` | Captures a photo from the Raspberry Pi camera and returns it Base64-encoded | None |
 | `record_video` | Records a video clip and returns it Base64-encoded (clamped to 1–30 s, 1–30 fps) | `duration_seconds` (int), `fps` (int) |
 

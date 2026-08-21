@@ -33,3 +33,10 @@ async def set_cube_gif(gif: str) -> dict[str, str]:
     async with Client(HMACTransport(SERVER_URL)) as client:
         result = await client.call_tool("set_cube_gif", {"gif": gif})
         return result.structured_content
+
+
+async def set_cube_brightness(level: int = 50) -> dict[str, str]:
+    """Requests the server to set the Cube display brightness (0-100, default 50)."""
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.call_tool("set_cube_brightness", {"level": level})
+        return result.structured_content
