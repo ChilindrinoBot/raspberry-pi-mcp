@@ -75,6 +75,9 @@ python -m client.main set-cube-gif --gif gif1.gif
 
 # 💡 Set the Cube display brightness to a specific level (0-100, default 50)
 python -m client.main set-cube-brightness --level 10
+
+# 💡 Get the current brightness level of the Cube display
+python -m client.main get-cube-brightness
 ```
 
 ## 🧪 Testing
@@ -112,6 +115,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube gif list, free space, gif-set (/image/<name>) and brightness (/set?brt=) tools
+│       └── cube.py     # Cube gif list, free space, gif-set (/image/<name>) and brightness (/set?brt=, /brt.json) tools
 └── tests/              # Integration tests
 ```

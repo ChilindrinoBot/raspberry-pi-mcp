@@ -28,6 +28,17 @@ async def get_cube_free_space() -> str:
         return result.contents[0].text
 
 
+async def get_cube_brightness() -> str:
+    """Fetches the current brightness level of the Cube from the server resource."""
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.read_resource("cube://brightness")
+
+        if not result.contents:
+            return "No brightness information available for the Cube."
+
+        return result.contents[0].text
+
+
 async def set_cube_gif(gif: str) -> dict[str, str]:
     """Requests the server to display a gif on the Cube (validated against the file list)."""
     async with Client(HMACTransport(SERVER_URL)) as client:

@@ -10,6 +10,8 @@ from server.display.cube import (
     set_cube_gif,
     _set_cube_brightness,
     set_cube_brightness,
+    _fetch_cube_brightness,
+    get_cube_brightness,
     BRIGHTNESS_DEFAULT,
     CUBE_BASE_URL,
 )
@@ -221,6 +223,49 @@ class SetCubeGifTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("Gif name is required", result["message"])
         mock_gifs.assert_not_called()
+
+
+class FetchCubeBrightnessTests(unittest.TestCase):
+    def test_returns_brightness_as_int_from_string_value(self) -> None:
+        with patch("server.display.cube.urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value.read.return_value = b'{"brt":"10"}'
+
+            brightness = _fetch_cube_brightness()
+
+            self.assertEqual(brightness, 10)
+
+    def test_fetch_failure_raises(self) -> None:
+        with patch(
+            "server.display.cube.urllib.request.urlopen",
+            side_effect=ConnectionRefusedError("connection refused"),
+        ):
+            with self.assertRaises(Exception) as ctx:
+                _fetch_cube_brightness()
+
+            self.assertIn("connection refused", str(ctx.exception))
+
+
+class GetCubeBrightnessTests(unittest.TestCase):
+    @patch("server.display.cube._fetch_cube_brightness", return_value=75)
+    def test_returns_current_brightness(self, mock_fetch: Mock) -> None:
+        result = get_cube_brightness()
+
+        self.assertEqual(result, "Current Cube brightness: 75")
+        mock_fetch.assert_called_once()
+
+    def test_returns_not_configured_when_no_base_url(self) -> None:
+        with patch("server.display.cube.CUBE_BASE_URL", ""):
+            result = get_cube_brightness()
+
+        self.assertIn("CUBE_BASE_URL is not configured", result)
+
+    @patch("server.display.cube._fetch_cube_brightness", side_effect=RuntimeError("timeout"))
+    def test_returns_error_on_fetch_failure(self, mock_fetch: Mock) -> None:
+        result = get_cube_brightness()
+
+        self.assertIn("Failed to fetch brightness from Cube", result)
+        self.assertIn("timeout", result)
+        mock_fetch.assert_called_once()
 
 
 class SetCubeBrightnessHelperTests(unittest.TestCase):

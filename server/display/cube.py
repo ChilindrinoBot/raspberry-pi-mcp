@@ -118,6 +118,29 @@ def set_cube_brightness(level: int = BRIGHTNESS_DEFAULT) -> dict[str, str]:
     }
 
 
+def _fetch_cube_brightness() -> int:
+    """Fetch the /brt.json endpoint from the Cube and return the current brightness level."""
+    url = f"{CUBE_BASE_URL}/brt.json"
+    data = json.loads(urllib.request.urlopen(url).read().decode())
+    return int(data["brt"])
+
+
+@mcp.resource("cube://brightness")
+def get_cube_brightness() -> str:
+    """
+    Returns the current brightness level of the Cube display.
+    """
+    if not CUBE_BASE_URL:
+        return "CUBE_BASE_URL is not configured. Set it in the .env file."
+
+    try:
+        brightness = _fetch_cube_brightness()
+    except Exception as e:
+        return f"Failed to fetch brightness from Cube: {e}"
+
+    return f"Current Cube brightness: {brightness}"
+
+
 def _set_cube_gif(gif: str) -> str:
     """Send a /set request to the Cube to display the given gif, returning the response body.
 
