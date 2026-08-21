@@ -78,6 +78,12 @@ python -m client.main set-cube-brightness --level 10
 
 # 💡 Get the current brightness level of the Cube display
 python -m client.main get-cube-brightness
+
+# 🌙 Turn off the Cube display (brightness 0, remembers the previous level)
+python -m client.main turn-cube-off
+
+# ☀️ Turn on the Cube display (restores the remembered brightness, default 50)
+python -m client.main turn-cube-on
 ```
 
 ## 🧪 Testing

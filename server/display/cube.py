@@ -25,6 +25,10 @@ BRIGHTNESS_DEFAULT: Final[int] = 50
 BRIGHTNESS_MIN: Final[int] = 0
 BRIGHTNESS_MAX: Final[int] = 100
 
+# Brightness level remembered when the display is turned off, so it can be
+# restored on the next power on. None means nothing has been remembered yet.
+_REMEMBERED_BRIGHTNESS: int | None = None
+
 
 def _fetch_cube_gifs() -> list[str]:
     """Fetch the /filelist page from the Cube and extract the available gif paths."""
@@ -139,6 +143,86 @@ def get_cube_brightness() -> str:
         return f"Failed to fetch brightness from Cube: {e}"
 
     return f"Current Cube brightness: {brightness}"
+
+
+@mcp.tool()
+def turn_cube_display_off() -> dict[str, str]:
+    """
+    Turns off the Cube display by setting its brightness to 0.
+
+    The brightness level active before turning off is remembered in memory so it
+    can be restored later with turn_cube_display_on. The level is queried from
+    the device; if unavailable, the last remembered value or the default (50)
+    is used instead.
+    """
+    global _REMEMBERED_BRIGHTNESS
+
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    try:
+        previous = _fetch_cube_brightness()
+    except Exception:
+        previous = _REMEMBERED_BRIGHTNESS if _REMEMBERED_BRIGHTNESS is not None else BRIGHTNESS_DEFAULT
+
+    if previous > BRIGHTNESS_MIN:
+        _REMEMBERED_BRIGHTNESS = max(BRIGHTNESS_MIN, min(BRIGHTNESS_MAX, previous))
+
+    try:
+        response = _set_cube_brightness(BRIGHTNESS_MIN)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to turn off Cube display: {e}"}
+
+    if "FAIL" in response.upper():
+        return {
+            "status": "error",
+            "message": f"Cube refused to turn off display. Response: {response}",
+        }
+
+    remembered = _REMEMBERED_BRIGHTNESS if _REMEMBERED_BRIGHTNESS is not None else BRIGHTNESS_DEFAULT
+    message = f"Cube display turned off. Brightness will be restored to {remembered} on next power on."
+    if response:
+        message += f" Device response: {response}"
+
+    return {"status": "success", "message": message}
+
+
+@mcp.tool()
+def turn_cube_display_on() -> dict[str, str]:
+    """
+    Turns on the Cube display by restoring the remembered brightness level.
+
+    Uses the brightness saved before the display was turned off; if nothing is
+    remembered (or the remembered value is 0), defaults to 50. The level is
+    clamped to the valid range [0, 100].
+    """
+    global _REMEMBERED_BRIGHTNESS
+
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    if _REMEMBERED_BRIGHTNESS is not None and _REMEMBERED_BRIGHTNESS > BRIGHTNESS_MIN:
+        level = _REMEMBERED_BRIGHTNESS
+    else:
+        level = BRIGHTNESS_DEFAULT
+    clamped = max(BRIGHTNESS_MIN, min(BRIGHTNESS_MAX, level))
+
+    try:
+        response = _set_cube_brightness(clamped)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to turn on Cube display: {e}"}
+
+    if "FAIL" in response.upper():
+        return {
+            "status": "error",
+            "message": f"Cube refused to turn on display. Response: {response}",
+        }
+
+    message = f"Cube display turned on at brightness {clamped}."
+    if response:
+        message += f" Device response: {response}"
+
+    return {"status": "success", "message": message}
 
 
 def _set_cube_gif(gif: str) -> str:

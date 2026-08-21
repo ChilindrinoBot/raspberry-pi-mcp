@@ -51,3 +51,17 @@ async def set_cube_brightness(level: int = 50) -> dict[str, str]:
     async with Client(HMACTransport(SERVER_URL)) as client:
         result = await client.call_tool("set_cube_brightness", {"level": level})
         return result.structured_content
+
+
+async def turn_cube_display_off() -> dict[str, str]:
+    """Requests the server to turn off the Cube display (brightness 0, remembering the previous level)."""
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.call_tool("turn_cube_display_off", {})
+        return result.structured_content
+
+
+async def turn_cube_display_on() -> dict[str, str]:
+    """Requests the server to turn on the Cube display (restores the remembered brightness, default 50)."""
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.call_tool("turn_cube_display_on", {})
+        return result.structured_content

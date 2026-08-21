@@ -8,6 +8,8 @@ from client.cube_client import (
     set_cube_gif,
     set_cube_brightness,
     get_cube_brightness,
+    turn_cube_display_off,
+    turn_cube_display_on,
 )
 
 
@@ -285,6 +287,108 @@ class SetCubeBrightnessClientTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertIn("Failed to set brightness on Cube", result["message"])
+
+
+class TurnCubeDisplayOffClientTests(unittest.TestCase):
+    @patch("client.cube_client.Client")
+    def test_connects_to_http_server(self, MockClient) -> None:
+        """turn_cube_display_off must connect to the configured HTTP URL."""
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Cube display turned off."}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(turn_cube_display_off())
+
+        MockClient.assert_called_once()
+
+    @patch("client.cube_client.Client")
+    def test_calls_turn_cube_display_off_tool(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Cube display turned off."}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(turn_cube_display_off())
+
+        mock_client.call_tool.assert_called_once_with("turn_cube_display_off", {})
+
+    @patch("client.cube_client.Client")
+    def test_returns_success(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        expected = {"status": "success", "message": "Cube display turned off. Brightness will be restored to 30."}
+        mock_client.call_tool.return_value = type("Obj", (), {"structured_content": expected})()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(turn_cube_display_off())
+
+        self.assertEqual(result, expected)
+
+    @patch("client.cube_client.Client")
+    def test_returns_when_server_rejects(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "error", "message": "Failed to turn off Cube display"}}
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(turn_cube_display_off())
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to turn off Cube display", result["message"])
+
+
+class TurnCubeDisplayOnClientTests(unittest.TestCase):
+    @patch("client.cube_client.Client")
+    def test_connects_to_http_server(self, MockClient) -> None:
+        """turn_cube_display_on must connect to the configured HTTP URL."""
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Cube display turned on at brightness 50."}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(turn_cube_display_on())
+
+        MockClient.assert_called_once()
+
+    @patch("client.cube_client.Client")
+    def test_calls_turn_cube_display_on_tool(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Cube display turned on at brightness 50."}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(turn_cube_display_on())
+
+        mock_client.call_tool.assert_called_once_with("turn_cube_display_on", {})
+
+    @patch("client.cube_client.Client")
+    def test_returns_success(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        expected = {"status": "success", "message": "Cube display turned on at brightness 75."}
+        mock_client.call_tool.return_value = type("Obj", (), {"structured_content": expected})()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(turn_cube_display_on())
+
+        self.assertEqual(result, expected)
+
+    @patch("client.cube_client.Client")
+    def test_returns_when_server_rejects(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "error", "message": "Failed to turn on Cube display"}}
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(turn_cube_display_on())
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to turn on Cube display", result["message"])
 
 
 if __name__ == "__main__":

@@ -12,7 +12,15 @@ from .speaker_client import mute, unmute, set_volume, get_volume
 from .micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from .image_client import save_photo
 from .video_client import save_video
-from .cube_client import list_cube_gifs, get_cube_free_space, set_cube_gif, set_cube_brightness, get_cube_brightness
+from .cube_client import (
+    list_cube_gifs,
+    get_cube_free_space,
+    set_cube_gif,
+    set_cube_brightness,
+    get_cube_brightness,
+    turn_cube_display_off,
+    turn_cube_display_on,
+)
 
 
 _CONNECTION_EXCEPTIONS: tuple[type[BaseException], ...] = (
@@ -130,6 +138,16 @@ async def run_cli():
     # Command 'get-cube-brightness'
     subparsers.add_parser("get-cube-brightness", help="Get the current brightness level of the Cube display")
 
+    # Command 'turn-cube-off'
+    subparsers.add_parser(
+        "turn-cube-off", help="Turn off the Cube display (brightness 0, remembers previous level)"
+    )
+
+    # Command 'turn-cube-on'
+    subparsers.add_parser(
+        "turn-cube-on", help="Turn on the Cube display (restores remembered brightness, default 50)"
+    )
+
     args = parser.parse_args()
 
     try:
@@ -221,6 +239,14 @@ async def run_cli():
             print("Fetching current Cube brightness level...")
             res = await get_cube_brightness()
             print(f"\n{res}")
+        elif args.command == "turn-cube-off":
+            print("Turning off the Cube display...")
+            res = await turn_cube_display_off()
+            print(f"Server Response: {res}")
+        elif args.command == "turn-cube-on":
+            print("Turning on the Cube display...")
+            res = await turn_cube_display_on()
+            print(f"Server Response: {res}")
         else:
             parser.print_help()
     except BaseException as e:

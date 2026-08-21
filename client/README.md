@@ -68,6 +68,12 @@ python -m client.main set-cube-brightness --level 10
 # 💡 Get the current brightness level of the Cube display
 python -m client.main get-cube-brightness
 
+# 🌙 Turn off the Cube display (brightness 0, remembers the previous level)
+python -m client.main turn-cube-off
+
+# ☀️ Turn on the Cube display (restores the remembered brightness, default 50)
+python -m client.main turn-cube-on
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -90,6 +96,8 @@ from client.cube_client import (
     set_cube_gif,
     set_cube_brightness,
     get_cube_brightness,
+    turn_cube_display_off,
+    turn_cube_display_on,
 )
 
 async def main():
@@ -173,6 +181,14 @@ async def main():
     # 💡 Get the current brightness level of the Cube display
     brightness = await get_cube_brightness()
     print(f"Cube brightness: {brightness}")
+
+    # 🌙 Turn off the Cube display (remembers the previous level)
+    result = await turn_cube_display_off()
+    print(f"Cube display off: {result}")
+
+    # ☀️ Turn on the Cube display (restores the remembered level, default 50)
+    result = await turn_cube_display_on()
+    print(f"Cube display on: {result}")
 
     # Later, stop the playback
     await stop_audio()
