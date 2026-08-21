@@ -53,6 +53,9 @@ python -m client.main take-photo --output photo.jpg
 # 🎥 Record a 15 second video at 10 fps
 python -m client.main record-video --output video.mp4 --duration 15 --fps 10
 
+# 🧊 List images available on the Cube display
+python -m client.main list-cube-images
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -69,6 +72,7 @@ from client.speaker_client import mute, unmute, set_volume, get_volume
 from client.micphone_client import mute_mic, unmute_mic, set_mic_volume, get_mic_volume, get_mic_mute_state
 from client.image_client import take_photo, save_photo
 from client.video_client import record_video, save_video
+from client.cube_client import list_cube_images
 
 async def main():
     # 📋 List available notifications
@@ -131,6 +135,10 @@ async def main():
     # 🎥 Or record a video and get the raw bytes
     video = await record_video(duration_seconds=5, fps=10)
     print(f"Video format: {video['format']}, {len(video['data'])} bytes")
+
+    # 🧊 List images available on the Cube display
+    cube_images = await list_cube_images()
+    print(f"Cube images:\n{cube_images}")
 
     # Later, stop the playback
     await stop_audio()

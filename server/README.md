@@ -10,6 +10,7 @@ The **Audio & Camera Server** is an MCP-compliant server that provides low-level
 - **Hardware Control**: Mute/Unmute and volume adjustments for both speakers and microphone.
 - **Photo Capture**: Capture photos from the Raspberry Pi camera and return them Base64-encoded.
 - **Video Recording**: Record short video clips from the Raspberry Pi camera and return them Base64-encoded. Duration (1–30 s) and framerate (1–30 fps) are controllable; a low framerate keeps the payload small.
+- **Cube Display Listing**: List the images available on the Cube display via HTTP.
 - **System Awareness**: Detects if `ffplay` is already running to prevent overlapping audio.
 - **Async Execution**: Audio is played in the background to keep the server responsive.
 
@@ -42,6 +43,7 @@ The server exposes the following MCP resources:
 - `speaker://volume`: Returns the current audio output volume level (0-100) as text, e.g. `Current volume: 75%`.
 - `micphone://mute-state`: Returns the current microphone mute state as text, e.g. `Microphone is muted.` or `Microphone is unmuted.`.
 - `micphone://volume`: Returns the current microphone volume level (0-100) as text, e.g. `Current microphone volume: 75%`.
+- `cube://images`: Returns a text list of the images currently available on the Cube display.
 
 ## ⚙️ Installation
 

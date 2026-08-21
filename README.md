@@ -5,7 +5,7 @@ A distributed audio management system based on the **Model Context Protocol (MCP
 
 ## 🏗️ Architecture
 The system is split into two main components:
-- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, and capture photos/videos from the camera.
+- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, capture photos/videos from the camera, and list the images available on the Cube display.
 - **`client/`**: A reference Python client that demonstrates how to send audio files and control commands to the server.
 
 ## 🚀 Quick Start
@@ -63,6 +63,9 @@ python -m client.main take-photo --output photo.jpg
 
 # 🎥 Record a 15 second video from the Raspberry Pi camera at a low framerate
 python -m client.main record-video --output video.mp4 --duration 15 --fps 10
+
+# 🧊 List images available on the Cube display
+python -m client.main list-cube-images
 ```
 
 ## 🧪 Testing
@@ -89,7 +92,8 @@ python -m unittest discover tests
 │   ├── audio_client.py # Audio control logic
 │   ├── image_client.py # Photo capture logic
 │   ├── video_client.py # Video recording logic
-│   └── notification_client.py # Notification logic
+│   ├── notification_client.py # Notification logic
+│   └── cube_client.py # Cube display image listing
 ├── server/             # MCP Server implementation
 │   ├── audio/          # Audio playback, volume and microphone logic
 │   │   ├── play.py     # Base audio control
@@ -97,6 +101,8 @@ python -m unittest discover tests
 │   │   ├── speaker.py  # Speaker mute/unmute and volume control
 │   │   └── micphone.py # Microphone mute/unmute and volume control
 │   ├── image/          # Photo capture tools
-│   └── video/          # Video recording tools
+│   ├── video/          # Video recording tools
+│   └── display/        # Cube display image listing
+│       └── cube.py     # Cube image list resource
 └── tests/              # Integration tests
 ```

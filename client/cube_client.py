@@ -1,0 +1,17 @@
+from __future__ import annotations
+
+from mcp import Client
+
+from .auth import HMACTransport
+from .config import SERVER_URL
+
+
+async def list_cube_images() -> str:
+    """Fetches the list of images available on the Cube from the server resource."""
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.read_resource("cube://images")
+
+        if not result.contents:
+            return "No images found on the Cube."
+
+        return result.contents[0].text
