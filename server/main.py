@@ -8,12 +8,19 @@ if __package__ in {None, ""}:
 
 import uvicorn
 
+from mcp.server.transport_security import TransportSecuritySettings
+
 from server import mcp
 from server.auth_middleware import AuthMiddleware
 
 __all__ = ["mcp"]
 
 if __name__ == "__main__":
-    app = mcp.streamable_http_app(streamable_http_path="/mcp")
+    app = mcp.streamable_http_app(
+        streamable_http_path="/mcp",
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=False,
+        ),
+    )
     app.add_middleware(AuthMiddleware)
     uvicorn.run(app, host="0.0.0.0", port=7777)
