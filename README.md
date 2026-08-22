@@ -90,6 +90,9 @@ python -m client.main turn-cube-on
 
 # 📤 Upload a gif/jpg image (must be 240x240) to the Cube display (sent Base64-encoded)
 python -m client.main upload-cube-gif --file path/to/image.gif
+
+# ⏱️ Show a gif/jpg image temporarily on the Cube (default 5 s, max 30 s, non-blocking)
+python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
 ```
 
 ## 🧪 Testing
@@ -128,6 +131,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube current gif (/img.json), gif list, free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off and image upload (/doUpload) tools
+│       └── cube.py     # Cube current gif (/img.json), gif list, free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload) and temporary gif tools
 └── tests/              # Integration tests
 ```

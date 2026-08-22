@@ -4,6 +4,8 @@ import base64
 import json
 import os
 import re
+import threading
+import time
 import urllib.parse
 import urllib.request
 from io import BytesIO
@@ -36,6 +38,17 @@ _REMEMBERED_BRIGHTNESS: int | None = None
 CUBE_IMAGE_DIR: Final[str] = "/image"
 ALLOWED_UPLOAD_SUFFIXES: Final[frozenset[str]] = frozenset({".gif", ".jpg", ".jpeg"})
 IMAGE_REQUIRED_DIMENSIONS: Final[tuple[int, int]] = (240, 240)
+
+TEMP_GIF_NAME: Final[str] = "tmp"
+TEMP_GIF_DEFAULT_SECONDS: Final[int] = 5
+TEMP_GIF_MIN_SECONDS: Final[int] = 1
+TEMP_GIF_MAX_SECONDS: Final[int] = 30
+
+# Temporary gif flow state. While _TEMP_GIF_RUNNING is True a tmp gif is being
+# shown and its previous gif has not been restored yet; new temporary shows are
+# rejected until it finishes.
+_TEMP_GIF_RUNNING: bool = False
+_TEMP_GIF_LOCK: Final[threading.Lock] = threading.Lock()
 
 
 def _fetch_cube_gifs() -> list[str]:
@@ -436,3 +449,118 @@ def upload_cube_image(data: str, filename: str) -> dict[str, str]:
         }
 
     return {"status": "success", "message": f"Image uploaded to Cube: {name}"}
+
+
+def _restore_previous_gif(previous: str, seconds: int) -> None:
+    """Sleep for `seconds` and then restore the previous gif on the Cube.
+
+    Runs in a background thread after show_temporary_gif has already replied,
+    so any error here cannot be reported back to the client.
+    """
+    global _TEMP_GIF_RUNNING
+
+    try:
+        time.sleep(seconds)
+        if previous:
+            _set_cube_gif(previous)
+    except Exception:
+        pass
+    finally:
+        with _TEMP_GIF_LOCK:
+            _TEMP_GIF_RUNNING = False
+
+
+@mcp.tool()
+def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT_SECONDS) -> dict[str, str]:
+    """
+    Shows a gif or jpg/jpeg image temporarily on the Cube display.
+
+    The flow is: read the gif currently displayed (to restore it later), upload
+    the new image as tmp.gif/tmp.jpg with the same validations as
+    upload_cube_image (Base64 decode, allowed extension, 240x240 dimensions,
+    free space, upload confirmation) and display it. The call returns
+    immediately; after the configured seconds a background job restores the
+    previous gif. Only one temporary gif can run at a time: while one is being
+    shown, new requests are rejected until it finishes.
+
+    Args:
+        data: Image bytes encoded in Base64 (client-side).
+        filename: Name of the image, used to determine its type (.gif -> tmp.gif,
+            .jpg/.jpeg -> tmp.jpg).
+        seconds: Seconds to show the image (default 5, clamped to [1, 30]).
+    """
+    global _TEMP_GIF_RUNNING
+
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    with _TEMP_GIF_LOCK:
+        busy = _TEMP_GIF_RUNNING
+    if busy:
+        return {
+            "status": "error",
+            "message": "A temporary gif is already being shown. Wait for it to finish before starting another.",
+        }
+
+    clamped = max(TEMP_GIF_MIN_SECONDS, min(TEMP_GIF_MAX_SECONDS, seconds))
+
+    name = Path(filename.strip()).name
+    suffix = Path(name).suffix.lower()
+    if suffix not in ALLOWED_UPLOAD_SUFFIXES:
+        return {
+            "status": "error",
+            "message": f"Unsupported file type: {suffix or 'none'}. Allowed: .gif, .jpg, .jpeg.",
+        }
+    tmp_name = f"{TEMP_GIF_NAME}.gif" if suffix == ".gif" else f"{TEMP_GIF_NAME}.jpg"
+
+    try:
+        current = _fetch_cube_current_gif()
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to read current gif from Cube: {e}"}
+
+    result = upload_cube_image(data, tmp_name)
+    if result["status"] != "success":
+        return result
+
+    with _TEMP_GIF_LOCK:
+        if _TEMP_GIF_RUNNING:
+            return {
+                "status": "error",
+                "message": "A temporary gif is already being shown. Wait for it to finish before starting another.",
+            }
+        _TEMP_GIF_RUNNING = True
+
+    try:
+        response = _set_cube_gif(tmp_name)
+    except Exception as e:
+        with _TEMP_GIF_LOCK:
+            _TEMP_GIF_RUNNING = False
+        return {"status": "error", "message": f"Failed to display temporary gif {tmp_name}: {e}"}
+
+    if "FAIL" in response.upper():
+        with _TEMP_GIF_LOCK:
+            _TEMP_GIF_RUNNING = False
+        return {
+            "status": "error",
+            "message": f"Cube refused to display temporary gif {tmp_name}. Response: {response}",
+        }
+
+    previous = current.removeprefix(f"{CUBE_IMAGE_DIR}/").lstrip("/")
+    threading.Thread(target=_restore_previous_gif, args=(previous, clamped), daemon=True).start()
+
+    if not previous:
+        return {
+            "status": "success",
+            "message": (
+                f"Temporary gif {tmp_name} is now displayed for {clamped} seconds. "
+                "No previous gif to restore."
+            ),
+        }
+
+    return {
+        "status": "success",
+        "message": (
+            f"Temporary gif {tmp_name} is now displayed for {clamped} seconds. "
+            f"{previous} will be restored automatically."
+        ),
+    }

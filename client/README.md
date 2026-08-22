@@ -80,6 +80,9 @@ python -m client.main turn-cube-on
 # 📤 Upload a gif/jpg image (must be 240x240) to the Cube display (sent Base64-encoded)
 python -m client.main upload-cube-gif --file path/to/image.gif
 
+# ⏱️ Show a gif/jpg image temporarily on the Cube (default 5 s, max 30 s, non-blocking)
+python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -106,6 +109,7 @@ from client.cube_client import (
     turn_cube_display_off,
     turn_cube_display_on,
     upload_cube_image,
+    show_temporary_gif,
 )
 
 async def main():
@@ -207,6 +211,12 @@ async def main():
     # without any filesystem path.
     result = await upload_cube_image("path/to/image.gif")
     print(f"Upload: {result}")
+
+    # ⏱️ Show a gif/jpg image temporarily (default 5 s, max 30 s, non-blocking).
+    # It is uploaded as tmp.gif/tmp.jpg, displayed and the previous gif is
+    # restored automatically in the background. Only one at a time.
+    result = await show_temporary_gif("path/to/image.gif", seconds=10)
+    print(f"Temporary show: {result}")
 
     # Later, stop the playback
     await stop_audio()

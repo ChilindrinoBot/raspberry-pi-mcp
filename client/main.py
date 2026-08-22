@@ -22,6 +22,7 @@ from .cube_client import (
     turn_cube_display_off,
     turn_cube_display_on,
     upload_cube_image,
+    show_temporary_gif,
 )
 
 
@@ -159,6 +160,18 @@ async def run_cli():
     )
     cube_upload_parser.add_argument("--file", required=True, help="Local path of the gif or jpg/jpeg image to upload")
 
+    # Command 'show-cube-gif'
+    cube_temp_parser = subparsers.add_parser(
+        "show-cube-gif", help="Show a gif/jpg image (240x240) temporarily on the Cube display"
+    )
+    cube_temp_parser.add_argument("--file", required=True, help="Local path of the gif or jpg/jpeg image to show")
+    cube_temp_parser.add_argument(
+        "--seconds",
+        type=int,
+        default=5,
+        help="Seconds to show the image before restoring the previous gif (default 5, max 30)",
+    )
+
     args = parser.parse_args()
 
     try:
@@ -265,6 +278,10 @@ async def run_cli():
         elif args.command == "upload-cube-gif":
             print(f"Uploading {args.file} to the Cube...")
             res = await upload_cube_image(args.file)
+            print(f"Server Response: {res}")
+        elif args.command == "show-cube-gif":
+            print(f"Showing {args.file} on the Cube for {args.seconds}s...")
+            res = await show_temporary_gif(args.file, args.seconds)
             print(f"Server Response: {res}")
         else:
             parser.print_help()

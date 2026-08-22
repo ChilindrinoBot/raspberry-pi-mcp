@@ -15,6 +15,7 @@ from client.cube_client import (
     turn_cube_display_off,
     turn_cube_display_on,
     upload_cube_image,
+    show_temporary_gif,
 )
 
 
@@ -452,7 +453,7 @@ class UploadCubeImageClientTests(unittest.TestCase):
     def _write_temp_gif(self) -> Path:
         tmp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(tmp_dir.cleanup)
-        path = Path(tmp_dir.name) / "bomb.gif"
+        path = Path(tmp_dir.name) / "test.gif"
         path.write_bytes(self.GIF_DATA)
         return path
 
@@ -462,7 +463,7 @@ class UploadCubeImageClientTests(unittest.TestCase):
         path = self._write_temp_gif()
         ctx, mock_client = _make_client_mock()
         mock_client.call_tool.return_value = type(
-            "Obj", (), {"structured_content": {"status": "success", "message": "Image uploaded to Cube: bomb.gif"}}
+            "Obj", (), {"structured_content": {"status": "success", "message": "Image uploaded to Cube: test.gif"}}
         )()
         MockClient.return_value = ctx
 
@@ -475,14 +476,14 @@ class UploadCubeImageClientTests(unittest.TestCase):
         path = self._write_temp_gif()
         ctx, mock_client = _make_client_mock()
         mock_client.call_tool.return_value = type(
-            "Obj", (), {"structured_content": {"status": "success", "message": "Image uploaded to Cube: bomb.gif"}}
+            "Obj", (), {"structured_content": {"status": "success", "message": "Image uploaded to Cube: test.gif"}}
         )()
         MockClient.return_value = ctx
 
         asyncio.run(upload_cube_image(str(path)))
 
         args = mock_client.call_tool.call_args[0][1]
-        self.assertEqual(args["filename"], "bomb.gif")
+        self.assertEqual(args["filename"], "test.gif")
         self.assertNotIn(str(path), args["data"])
         # The sent payload must decode back to the original file bytes.
         self.assertEqual(base64.b64decode(args["data"]), self.GIF_DATA)
@@ -491,7 +492,7 @@ class UploadCubeImageClientTests(unittest.TestCase):
     def test_returns_success(self, MockClient) -> None:
         path = self._write_temp_gif()
         ctx, mock_client = _make_client_mock()
-        expected = {"status": "success", "message": "Image uploaded to Cube: bomb.gif"}
+        expected = {"status": "success", "message": "Image uploaded to Cube: test.gif"}
         mock_client.call_tool.return_value = type("Obj", (), {"structured_content": expected})()
         MockClient.return_value = ctx
 
@@ -506,7 +507,7 @@ class UploadCubeImageClientTests(unittest.TestCase):
         mock_client.call_tool.return_value = type(
             "Obj",
             (),
-            {"structured_content": {"status": "error", "message": "Image must be 240x240 (got 100x100): bomb.gif."}},
+            {"structured_content": {"status": "error", "message": "Image must be 240x240 (got 100x100): test.gif."}},
         )()
         MockClient.return_value = ctx
 
@@ -517,7 +518,100 @@ class UploadCubeImageClientTests(unittest.TestCase):
 
     def test_raises_when_file_missing(self) -> None:
         with self.assertRaises(OSError):
-            asyncio.run(upload_cube_image("/nonexistent/path/bomb.gif"))
+            asyncio.run(upload_cube_image("/nonexistent/path/test.gif"))
+
+
+class ShowTemporaryGifClientTests(unittest.TestCase):
+    GIF_DATA = b"GIF89a" + (240).to_bytes(2, "little") + (240).to_bytes(2, "little") + b"\x00\x00\x00"
+
+    def _write_temp_gif(self) -> Path:
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        path = Path(tmp_dir.name) / "test.gif"
+        path.write_bytes(self.GIF_DATA)
+        return path
+
+    @patch("client.cube_client.Client")
+    def test_connects_to_http_server(self, MockClient) -> None:
+        """show_temporary_gif must connect to the configured HTTP URL."""
+        path = self._write_temp_gif()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "shown"}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(show_temporary_gif(str(path)))
+
+        MockClient.assert_called_once()
+
+    @patch("client.cube_client.Client")
+    def test_sends_data_filename_and_seconds(self, MockClient) -> None:
+        path = self._write_temp_gif()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "shown"}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(show_temporary_gif(str(path), seconds=10))
+
+        name, args = mock_client.call_tool.call_args[0]
+        self.assertEqual(name, "show_temporary_gif")
+        self.assertEqual(args["filename"], "test.gif")
+        self.assertEqual(args["seconds"], 10)
+        self.assertEqual(base64.b64decode(args["data"]), self.GIF_DATA)
+
+    @patch("client.cube_client.Client")
+    def test_defaults_to_5_seconds(self, MockClient) -> None:
+        path = self._write_temp_gif()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "shown"}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(show_temporary_gif(str(path)))
+
+        mock_client.call_tool.assert_called_once_with(
+            "show_temporary_gif",
+            {"data": base64.b64encode(self.GIF_DATA).decode(), "filename": "test.gif", "seconds": 5},
+        )
+
+    @patch("client.cube_client.Client")
+    def test_returns_success(self, MockClient) -> None:
+        path = self._write_temp_gif()
+        ctx, mock_client = _make_client_mock()
+        expected = {
+            "status": "success",
+            "message": "Temporary gif tmp.gif displayed for 5 seconds. Restored to: test.gif",
+        }
+        mock_client.call_tool.return_value = type("Obj", (), {"structured_content": expected})()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(show_temporary_gif(str(path)))
+
+        self.assertEqual(result, expected)
+
+    @patch("client.cube_client.Client")
+    def test_returns_when_server_rejects(self, MockClient) -> None:
+        path = self._write_temp_gif()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj",
+            (),
+            {"structured_content": {"status": "error", "message": "Unsupported file type: .png. Allowed: .gif, .jpg, .jpeg."}},
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(show_temporary_gif(str(path)))
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Unsupported file type", result["message"])
+
+    def test_raises_when_file_missing(self) -> None:
+        with self.assertRaises(OSError):
+            asyncio.run(show_temporary_gif("/nonexistent/path/test.gif"))
 
 
 if __name__ == "__main__":

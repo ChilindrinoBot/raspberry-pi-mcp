@@ -28,6 +28,8 @@ from server.display.cube import (
     _upload_cube_image,
     _is_in_cube_filelist,
     upload_cube_image,
+    show_temporary_gif,
+    _restore_previous_gif,
     BRIGHTNESS_DEFAULT,
     CUBE_BASE_URL,
 )
@@ -312,11 +314,11 @@ class GetCubeCurrentGifTests(unittest.TestCase):
         self.assertEqual(result, "Current Cube gif: test.gif")
         mock_fetch.assert_called_once()
 
-    @patch("server.display.cube._fetch_cube_current_gif", return_value="/other/Bomb.gif")
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/other/tmp.gif")
     def test_keeps_paths_outside_image_dir(self, mock_fetch: Mock) -> None:
         result = get_cube_current_gif()
 
-        self.assertEqual(result, "Current Cube gif: other/Bomb.gif")
+        self.assertEqual(result, "Current Cube gif: other/tmp.gif")
 
     @patch("server.display.cube._fetch_cube_current_gif", return_value="")
     def test_returns_no_gif_when_empty(self, mock_fetch: Mock) -> None:
@@ -608,12 +610,12 @@ class ImageDimensionsTests(unittest.TestCase):
 class UploadCubeImageHelperTests(unittest.TestCase):
     @patch("server.display.cube.httpx.post")
     def test_gif_posts_to_do_upload_in_image_field(self, mock_post: Mock) -> None:
-        _upload_cube_image("bomb.gif", b"gifdata")
+        _upload_cube_image("tmp.gif", b"gifdata")
 
         mock_post.assert_called_once()
         self.assertIn("/doUpload?dir=/image", mock_post.call_args[0][0])
         filename, content = mock_post.call_args[1]["files"]["image"]
-        self.assertEqual(filename, "bomb.gif")
+        self.assertEqual(filename, "tmp.gif")
         self.assertEqual(content, b"gifdata")
 
     @patch("server.display.cube.httpx.post")
@@ -630,7 +632,7 @@ class UploadCubeImageHelperTests(unittest.TestCase):
     )
     def test_upload_failure_raises(self, mock_post: Mock) -> None:
         with self.assertRaises(Exception) as ctx:
-            _upload_cube_image("bomb.gif", b"gifdata")
+            _upload_cube_image("tmp.gif", b"gifdata")
 
         self.assertIn("connection refused", str(ctx.exception))
 
@@ -648,10 +650,10 @@ class DecodeImageTests(unittest.TestCase):
 
 class IsInCubeFilelistTests(unittest.TestCase):
     def test_matches_plain_entry(self) -> None:
-        self.assertTrue(_is_in_cube_filelist("bomb.gif", ["Bomb.gif"]))
+        self.assertTrue(_is_in_cube_filelist("tmp.gif", ["tmp.gif"]))
 
     def test_matches_entry_inside_image_dir(self) -> None:
-        self.assertTrue(_is_in_cube_filelist("test.jpg", ["image/Bomb.gif", "image/test.jpg"]))
+        self.assertTrue(_is_in_cube_filelist("test.jpg", ["image/tmp.gif", "image/test.jpg"]))
 
     def test_is_case_insensitive(self) -> None:
         self.assertTrue(_is_in_cube_filelist("TEST.JPG", ["image/test.jpg"]))
@@ -660,26 +662,26 @@ class IsInCubeFilelistTests(unittest.TestCase):
         self.assertFalse(_is_in_cube_filelist("test.jpg", ["image/mytest.jpg"]))
 
     def test_rejects_missing_file(self) -> None:
-        self.assertFalse(_is_in_cube_filelist("missing.gif", ["image/Bomb.gif"]))
+        self.assertFalse(_is_in_cube_filelist("missing.gif", ["image/tmp.gif"]))
 
 
 class UploadCubeImageTests(unittest.TestCase):
     def _encoded(self, data: bytes) -> str:
         return base64.b64encode(data).decode()
 
-    @patch("server.display.cube._fetch_cube_gifs", return_value=["image/Bomb.gif", "image/test.jpg"])
+    @patch("server.display.cube._fetch_cube_gifs", return_value=["image/tmp.gif", "image/test.jpg"])
     @patch("server.display.cube._fetch_cube_space", return_value=(1024 * 1024, 3 * 1024 * 1024))
     @patch("server.display.cube._upload_cube_image")
     def test_success_with_encoded_gif_confirms_in_filelist(
         self, mock_upload: Mock, mock_space: Mock, mock_gifs: Mock
     ) -> None:
-        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "bomb.gif")
+        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "tmp.gif")
 
         self.assertEqual(result["status"], "success")
-        self.assertEqual(result["message"], "Image uploaded to Cube: bomb.gif")
+        self.assertEqual(result["message"], "Image uploaded to Cube: tmp.gif")
         mock_space.assert_called_once()
         filename, payload = mock_upload.call_args[0]
-        self.assertEqual(filename, "bomb.gif")
+        self.assertEqual(filename, "tmp.gif")
         self.assertEqual(payload, _image_bytes("GIF", 240, 240))
         mock_gifs.assert_called_once()
 
@@ -694,7 +696,7 @@ class UploadCubeImageTests(unittest.TestCase):
 
     def test_returns_error_when_not_configured(self) -> None:
         with patch("server.display.cube.CUBE_BASE_URL", ""):
-            result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "bomb.gif")
+            result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "tmp.gif")
 
         self.assertEqual(result["status"], "error")
         self.assertIn("CUBE_BASE_URL is not configured", result["message"])
@@ -718,22 +720,22 @@ class UploadCubeImageTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("Filename is required", result["message"])
 
-    @patch("server.display.cube._fetch_cube_gifs", return_value=["image/bomb.gif"])
+    @patch("server.display.cube._fetch_cube_gifs", return_value=["image/tmp.gif"])
     @patch("server.display.cube._fetch_cube_space", return_value=(1024 * 1024, 3 * 1024 * 1024))
     @patch("server.display.cube._upload_cube_image")
     def test_uses_basename_of_sent_filename(
         self, mock_upload: Mock, mock_space: Mock, mock_gifs: Mock
     ) -> None:
-        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "/etc/passwd/bomb.gif")
+        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "/etc/passwd/tmp.gif")
 
         self.assertEqual(result["status"], "success")
-        self.assertEqual(mock_upload.call_args[0][0], "bomb.gif")
+        self.assertEqual(mock_upload.call_args[0][0], "tmp.gif")
 
     def test_rejects_malformed_base64(self) -> None:
-        result = upload_cube_image("not-valid-base64!!!", "bomb.gif")
+        result = upload_cube_image("not-valid-base64!!!", "tmp.gif")
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("Failed to decode image bomb.gif", result["message"])
+        self.assertIn("Failed to decode image tmp.gif", result["message"])
 
     @patch("server.display.cube._decode_image", return_value=b"")
     def test_rejects_empty_payload(self, mock_decode: Mock) -> None:
@@ -774,18 +776,18 @@ class UploadCubeImageTests(unittest.TestCase):
 
     @patch("server.display.cube._fetch_cube_space", side_effect=RuntimeError("timeout"))
     def test_returns_error_when_space_check_fails(self, mock_space: Mock) -> None:
-        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "bomb.gif")
+        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "tmp.gif")
 
         self.assertEqual(result["status"], "error")
         self.assertIn("Failed to check free space on Cube", result["message"])
 
-    @patch("server.display.cube._fetch_cube_gifs", return_value=["image/Bomb.gif"])
+    @patch("server.display.cube._fetch_cube_gifs", return_value=["image/tmp.gif"])
     @patch("server.display.cube._fetch_cube_space", return_value=(1024 * 1024, 3 * 1024 * 1024))
     @patch("server.display.cube._upload_cube_image", side_effect=RuntimeError("connection refused"))
     def test_returns_error_when_upload_fails(
         self, mock_upload: Mock, mock_space: Mock, mock_gifs: Mock
     ) -> None:
-        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "bomb.gif")
+        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "tmp.gif")
 
         self.assertEqual(result["status"], "error")
         self.assertIn("Failed to upload image to Cube", result["message"])
@@ -797,12 +799,12 @@ class UploadCubeImageTests(unittest.TestCase):
     def test_returns_error_when_confirmation_fails(
         self, mock_upload: Mock, mock_space: Mock, mock_gifs: Mock
     ) -> None:
-        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "bomb.gif")
+        result = upload_cube_image(self._encoded(_image_bytes("GIF", 240, 240)), "tmp.gif")
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("Failed to verify upload of bomb.gif on Cube", result["message"])
+        self.assertIn("Failed to verify upload of tmp.gif on Cube", result["message"])
 
-    @patch("server.display.cube._fetch_cube_gifs", return_value=["image/Bomb.gif", "image/other.jpg"])
+    @patch("server.display.cube._fetch_cube_gifs", return_value=["image/tmp.gif", "image/other.jpg"])
     @patch("server.display.cube._fetch_cube_space", return_value=(1024 * 1024, 3 * 1024 * 1024))
     @patch("server.display.cube._upload_cube_image")
     def test_returns_error_when_file_not_in_filelist(
@@ -813,6 +815,242 @@ class UploadCubeImageTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("Upload could not be confirmed", result["message"])
         self.assertIn("missing.gif is not in the Cube file list", result["message"])
+
+
+class ShowTemporaryGifTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_running = cube_module._TEMP_GIF_RUNNING
+        cube_module._TEMP_GIF_RUNNING = False
+
+    def tearDown(self) -> None:
+        cube_module._TEMP_GIF_RUNNING = self._original_running
+
+    def _encoded(self, data: bytes) -> str:
+        return base64.b64encode(data).decode()
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    def test_shows_tmp_and_schedules_background_restore(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("tmp.gif is now displayed for 5 seconds", result["message"])
+        self.assertIn("test.gif will be restored automatically", result["message"])
+        mock_current.assert_called_once()
+        mock_upload.assert_called_once_with(self._encoded(b"gifdata"), "tmp.gif")
+        mock_set.assert_called_once_with("tmp.gif")
+        mock_thread_cls.assert_called_once_with(
+            target=cube_module._restore_previous_gif, args=("test.gif", 5), daemon=True
+        )
+        mock_thread_cls.return_value.start.assert_called_once()
+        self.assertTrue(cube_module._TEMP_GIF_RUNNING)
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/photo.jpg")
+    def test_maps_jpeg_extension_to_tmp_jpg(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"jpgdata"), "photo.JPEG")
+
+        self.assertEqual(result["status"], "success")
+        mock_upload.assert_called_once_with(self._encoded(b"jpgdata"), "tmp.jpg")
+        mock_thread_cls.assert_called_once_with(
+            target=cube_module._restore_previous_gif, args=("photo.jpg", 5), daemon=True
+        )
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    def test_clamps_seconds_above_max(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif", seconds=100)
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("displayed for 30 seconds", result["message"])
+        mock_thread_cls.assert_called_once_with(
+            target=cube_module._restore_previous_gif, args=("test.gif", 30), daemon=True
+        )
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    def test_clamps_seconds_below_min(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif", seconds=0)
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("displayed for 1 seconds", result["message"])
+        mock_thread_cls.assert_called_once_with(
+            target=cube_module._restore_previous_gif, args=("test.gif", 1), daemon=True
+        )
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="")
+    def test_reports_no_previous_gif_to_restore(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("No previous gif to restore", result["message"])
+        mock_set.assert_called_once_with("tmp.gif")
+        mock_thread_cls.assert_called_once_with(
+            target=cube_module._restore_previous_gif, args=("", 5), daemon=True
+        )
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube.upload_cube_image")
+    @patch("server.display.cube._fetch_cube_current_gif")
+    def test_rejects_when_a_temporary_gif_is_already_running(
+        self, mock_current: Mock, mock_upload: Mock, mock_thread_cls: Mock
+    ) -> None:
+        cube_module._TEMP_GIF_RUNNING = True
+
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("A temporary gif is already being shown", result["message"])
+        mock_current.assert_not_called()
+        mock_upload.assert_not_called()
+        mock_thread_cls.assert_not_called()
+
+    def test_rejects_unsupported_extension(self) -> None:
+        with patch("server.display.cube.upload_cube_image") as mock_upload:
+            result = show_temporary_gif(self._encoded(b"data"), "picture.png")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Unsupported file type: .png", result["message"])
+        mock_upload.assert_not_called()
+
+    def test_rejects_filename_without_extension(self) -> None:
+        with patch("server.display.cube.upload_cube_image") as mock_upload:
+            result = show_temporary_gif(self._encoded(b"data"), "noext")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Unsupported file type: none", result["message"])
+
+    def test_returns_error_when_not_configured(self) -> None:
+        with patch("server.display.cube.CUBE_BASE_URL", ""):
+            result = show_temporary_gif(self._encoded(b"data"), "tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("CUBE_BASE_URL is not configured", result["message"])
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube.upload_cube_image")
+    @patch("server.display.cube._fetch_cube_current_gif", side_effect=RuntimeError("timeout"))
+    def test_returns_error_when_current_gif_cannot_be_read(
+        self, mock_current: Mock, mock_upload: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to read current gif from Cube", result["message"])
+        mock_upload.assert_not_called()
+        mock_thread_cls.assert_not_called()
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif")
+    @patch(
+        "server.display.cube.upload_cube_image",
+        return_value={"status": "error", "message": "Image must be 240x240 (got 100x100): tmp.gif."},
+    )
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    def test_propagates_upload_error_without_displaying(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image must be 240x240", result["message"])
+        mock_set.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", side_effect=RuntimeError("connection refused"))
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    def test_returns_error_when_display_fails_and_releases_flag(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to display temporary gif tmp.gif", result["message"])
+        mock_thread_cls.assert_not_called()
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="FAIL")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    def test_returns_error_when_display_refused_and_releases_flag(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Cube refused to display temporary gif", result["message"])
+        mock_thread_cls.assert_not_called()
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+
+
+class RestorePreviousGifTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_running = cube_module._TEMP_GIF_RUNNING
+        cube_module._TEMP_GIF_RUNNING = False
+
+    def tearDown(self) -> None:
+        cube_module._TEMP_GIF_RUNNING = self._original_running
+
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.time.sleep")
+    def test_sleeps_then_restores_previous_gif(self, mock_sleep: Mock, mock_set: Mock) -> None:
+        cube_module._TEMP_GIF_RUNNING = True
+
+        _restore_previous_gif("test.gif", 7)
+
+        mock_sleep.assert_called_once_with(7)
+        mock_set.assert_called_once_with("test.gif")
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+
+    @patch("server.display.cube._set_cube_gif")
+    @patch("server.display.cube.time.sleep")
+    def test_skips_restore_when_no_previous_gif(self, mock_sleep: Mock, mock_set: Mock) -> None:
+        cube_module._TEMP_GIF_RUNNING = True
+
+        _restore_previous_gif("", 3)
+
+        mock_sleep.assert_called_once_with(3)
+        mock_set.assert_not_called()
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+
+    @patch(
+        "server.display.cube._set_cube_gif",
+        side_effect=RuntimeError("connection refused"),
+    )
+    @patch("server.display.cube.time.sleep")
+    def test_swallows_restore_errors_and_releases_flag(
+        self, mock_sleep: Mock, mock_set: Mock
+    ) -> None:
+        cube_module._TEMP_GIF_RUNNING = True
+
+        _restore_previous_gif("test.gif", 2)
+
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
 
 
 if __name__ == "__main__":

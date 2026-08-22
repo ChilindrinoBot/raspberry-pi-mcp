@@ -16,6 +16,7 @@ The **Audio & Camera Server** is an MCP-compliant server that provides low-level
 - **Cube Brightness Control**: Set the Cube display brightness (0–100, default 50) via its `/set?brt=` endpoint and query the current level via `/brt.json`.
 - **Cube Display Power**: Turn the display off (brightness 0) remembering the previous level in memory, and turn it back on restoring that level (default 50 if nothing is remembered). The memory is in-process and resets when the server restarts.
 - **Cube Image Upload**: Receive gif/jpg images Base64-encoded from the client (no server-side filesystem path involved), validate them (.gif/.jpg/.jpeg, exactly 240x240, checked with Pillow) and upload them to the Cube's `/image` directory via `/doUpload`. The upload is confirmed by checking the file appears in the Cube's file list before reporting success.
+- **Cube Temporary Gif**: Show a gif/jpg momentarily: remembers the current gif, uploads the new image as `tmp.gif`/`tmp.jpg` with full validations and displays it. The call is non-blocking — a background job restores the previous gif after the configured time (default 5 s, max 30 s). While a temporary gif is being shown, new temporary shows are rejected until it finishes (in-process flag, like audio process control).
 - **System Awareness**: Detects if `ffplay` is already running to prevent overlapping audio.
 - **Async Execution**: Audio is played in the background to keep the server responsive.
 
@@ -36,11 +37,12 @@ The server exposes the following MCP tools:
 | `mute_mic` | Mutes the microphone | None |
 | `unmute_mic` | Unmutes the microphone | None |
 | `set_mic_volume` | Sets the microphone volume to a level between 0 and 100 | `level` (int) |
-| `set_cube_image` | Displays an image on the Cube (URL `/set?img=/image/<name>`) after validating the image exists in the Cube's file list | `image` (str) |
+| `set_cube_gif` | Displays an image on the Cube (URL `/set?img=/image/<name>`) after validating the image exists in the Cube's file list | `gif` (str) |
 | `set_cube_brightness` | Sets the Cube display brightness via URL `/set?brt=<level>` (clamped to 0–100, default 50) | `level` (int, optional) |
 | `turn_cube_display_off` | Turns off the Cube display (brightness 0) remembering the previous level in memory | None |
 | `turn_cube_display_on` | Turns on the Cube display restoring the remembered brightness (default 50 if none) | None |
 | `upload_cube_image` | Decodes a Base64-encoded image sent by the client, validates it (.gif/.jpg/.jpeg, 240x240, free space) and uploads it to the Cube's /image dir via `/doUpload` | `data` (str), `filename` (str) |
+| `show_temporary_gif` | Shows a Base64-encoded gif/jpg temporarily and returns immediately: uploads it as tmp.gif/tmp.jpg, displays it for N seconds (default 5, clamped to 1–30) and restores the previous gif in a background job. One temporary gif at a time | `data` (str), `filename` (str), `seconds` (int, optional) |
 | `take_photo` | Captures a photo from the Raspberry Pi camera and returns it Base64-encoded | None |
 | `record_video` | Records a video clip and returns it Base64-encoded (clamped to 1–30 s, 1–30 fps) | `duration_seconds` (int), `fps` (int) |
 

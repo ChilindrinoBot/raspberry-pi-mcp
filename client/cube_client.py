@@ -102,3 +102,21 @@ async def upload_cube_image(file_path: str) -> dict[str, str]:
             {"data": encoded, "filename": path.name},
         )
         return result.structured_content
+
+
+async def show_temporary_gif(file_path: str, seconds: int = 5) -> dict[str, str]:
+    """Shows a local gif/jpg image (240x240) temporarily on the Cube display.
+
+    The file is uploaded as tmp.gif/tmp.jpg, displayed for the given seconds
+    (default 5, max 30) and afterwards the previous gif is restored.
+    """
+    path = Path(file_path.strip())
+    data = path.read_bytes()
+    encoded = _encode_image(data)
+
+    async with Client(HMACTransport(SERVER_URL)) as client:
+        result = await client.call_tool(
+            "show_temporary_gif",
+            {"data": encoded, "filename": path.name, "seconds": seconds},
+        )
+        return result.structured_content
