@@ -5,13 +5,13 @@ from pathlib import Path
 
 from mcp import Client
 
-from .auth import HMACTransport
+from .auth import AuthTransport
 from .config import SERVER_URL
 
 
 async def get_cube_current_gif() -> str:
     """Fetches the gif currently displayed on the Cube from the server resource."""
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.read_resource("cube://current-gif")
 
         if not result.contents:
@@ -22,7 +22,7 @@ async def get_cube_current_gif() -> str:
 
 async def list_cube_gifs() -> str:
     """Fetches the list of gifs available on the Cube from the server resource."""
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.read_resource("cube://gifs")
 
         if not result.contents:
@@ -33,7 +33,7 @@ async def list_cube_gifs() -> str:
 
 async def get_cube_free_space() -> str:
     """Fetches the free storage space available on the Cube from the server resource."""
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.read_resource("cube://free-space")
 
         if not result.contents:
@@ -44,7 +44,7 @@ async def get_cube_free_space() -> str:
 
 async def get_cube_brightness() -> str:
     """Fetches the current brightness level of the Cube from the server resource."""
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.read_resource("cube://brightness")
 
         if not result.contents:
@@ -55,28 +55,28 @@ async def get_cube_brightness() -> str:
 
 async def set_cube_gif(gif: str) -> dict[str, str]:
     """Requests the server to display a gif on the Cube (validated against the file list)."""
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool("set_cube_gif", {"gif": gif})
         return result.structured_content
 
 
 async def set_cube_brightness(level: int = 50) -> dict[str, str]:
     """Requests the server to set the Cube display brightness (0-100, default 50)."""
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool("set_cube_brightness", {"level": level})
         return result.structured_content
 
 
 async def turn_cube_display_off() -> dict[str, str]:
     """Requests the server to turn off the Cube display (brightness 0, remembering the previous level)."""
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool("turn_cube_display_off", {})
         return result.structured_content
 
 
 async def turn_cube_display_on() -> dict[str, str]:
     """Requests the server to turn on the Cube display (restores the remembered brightness, default 50)."""
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool("turn_cube_display_on", {})
         return result.structured_content
 
@@ -96,7 +96,7 @@ async def upload_cube_image(file_path: str) -> dict[str, str]:
     data = path.read_bytes()
     encoded = _encode_image(data)
 
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool(
             "upload_cube_image",
             {"data": encoded, "filename": path.name},
@@ -114,7 +114,7 @@ async def show_temporary_gif(file_path: str, seconds: int = 5) -> dict[str, str]
     data = path.read_bytes()
     encoded = _encode_image(data)
 
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool(
             "show_temporary_gif",
             {"data": encoded, "filename": path.name, "seconds": seconds},

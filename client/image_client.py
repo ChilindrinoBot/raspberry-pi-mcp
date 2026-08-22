@@ -6,7 +6,7 @@ from typing import Final
 
 from mcp import Client
 
-from .auth import HMACTransport
+from .auth import AuthTransport
 from .config import SERVER_URL
 
 MAX_PHOTO_BYTES: Final[int] = 10 * 1024 * 1024
@@ -27,7 +27,7 @@ def _decode_photo_payload(encoded_photo: str, max_bytes: int = MAX_PHOTO_BYTES) 
 
 async def take_photo() -> dict:
     """Requests the server to capture a photo and returns the decoded photo bytes."""
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool("take_photo", {})
         content = result.structured_content
 

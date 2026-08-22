@@ -6,7 +6,7 @@ from typing import Final
 
 from mcp import Client
 
-from .auth import HMACTransport
+from .auth import AuthTransport
 from .config import SERVER_URL
 
 MAX_VIDEO_BYTES: Final[int] = 50 * 1024 * 1024
@@ -35,7 +35,7 @@ async def record_video(
         fps: Desired framerate in frames per second (1-30). Low values keep the
             payload small.
     """
-    async with Client(HMACTransport(SERVER_URL)) as client:
+    async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool(
             "record_video",
             {"duration_seconds": int(duration_seconds), "fps": int(fps)},

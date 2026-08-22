@@ -9,11 +9,11 @@ if __package__ in {None, ""}:
 import uvicorn
 
 from server import mcp
-from server.hmac_middleware import HMACMiddleware
+from server.auth_middleware import AuthMiddleware
 
 __all__ = ["mcp"]
 
 if __name__ == "__main__":
     app = mcp.streamable_http_app(streamable_http_path="/mcp")
-    app.add_middleware(HMACMiddleware)
+    app.add_middleware(AuthMiddleware)
     uvicorn.run(app, host="0.0.0.0", port=7777)

@@ -1,11 +1,8 @@
-"""Client-side HMAC authentication for MCP requests."""
+"""Client-side Bearer token authentication for MCP requests."""
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
-import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -17,43 +14,22 @@ from mcp.shared._httpx_utils import create_mcp_http_client
 
 load_dotenv()
 
-HMAC_SECRET = os.environ.get("SECRET", "")
-HMAC_TIMESTAMP_HEADER = "X-HMAC-Timestamp"
-HMAC_SIGNATURE_HEADER = "X-HMAC-Signature"
-HMAC_MAX_AGE_SECONDS = 300  # 5 minutes
+AUTH_TOKEN = os.environ.get("SECRET", "")
 
 
-def _get_secret() -> bytes:
-    if not HMAC_SECRET:
-        raise RuntimeError(
-            "SECRET not found in environment. "
-            "Set it in a .env file or as an environment variable."
-        )
-    return HMAC_SECRET.encode()
-
-
-def compute_hmac(body: bytes, timestamp: str) -> str:
-    message = timestamp.encode() + b":" + body
-    return hmac.new(_get_secret(), message, hashlib.sha256).hexdigest()
-
-
-def _signing_auth(request: httpx.Request) -> httpx.Request:
-    timestamp = str(int(time.time()))
-    body = request.content or b""
-    signature = compute_hmac(body, timestamp)
-    request.headers[HMAC_TIMESTAMP_HEADER] = timestamp
-    request.headers[HMAC_SIGNATURE_HEADER] = signature
+def _bearer_auth(request: httpx.Request) -> httpx.Request:
+    request.headers["Authorization"] = f"Bearer {AUTH_TOKEN}"
     return request
 
 
 @asynccontextmanager
-async def HMACTransport(url: str) -> AsyncGenerator[TransportStreams, None]:
-    """MCP Transport that signs every HTTP request with HMAC authentication.
+async def AuthTransport(url: str) -> AsyncGenerator[TransportStreams, None]:
+    """MCP Transport that sends every HTTP request with Bearer authentication.
 
     Usage:
-        async with Client(HMACTransport("http://...")) as client:
+        async with Client(AuthTransport("http://...")) as client:
             ...
     """
-    client = create_mcp_http_client(auth=_signing_auth)
+    client = create_mcp_http_client(auth=_bearer_auth)
     async with streamable_http_client(url, http_client=client) as streams:
         yield streams
