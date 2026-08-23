@@ -63,7 +63,7 @@ _TEMP_GIF_RUNNING: bool = False
 _TEMP_GIF_LOCK: Final[threading.Lock] = threading.Lock()
 
 # Local folder holding the gif pool used by the random gif mode.
-RANDOM_GIF_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "media" / "video" / "gifs"
+RANDOM_GIF_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "media" / "gifs"
 
 # Name under which every picked gif is temporarily uploaded to the Cube, so a
 # new random gif simply overwrites the previous one.
@@ -1189,7 +1189,7 @@ def list_gallery_images() -> str:
 @mcp.resource("gallery://gifs")
 def list_gallery_gifs() -> str:
     """
-    Returns a list of gifs available in the local media/video/gifs gallery.
+    Returns a list of gifs available in the local media/gifs gallery.
     """
     gifs = _list_local_gifs()
 
@@ -1202,7 +1202,7 @@ def list_gallery_gifs() -> str:
 @mcp.tool()
 def start_random_gifs(seconds: int = RANDOM_GIF_DEFAULT_SECONDS) -> dict[str, str]:
     """
-    Starts cycling random gifs from media/video/gifs on the Cube display.
+    Starts cycling random gifs from media/gifs on the Cube display.
 
     Picks a random gif from the local gifs folder, uploads it to the Cube as
     random.gif (overwriting the previous one) and displays it. Every `seconds`

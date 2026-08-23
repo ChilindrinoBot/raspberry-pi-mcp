@@ -206,13 +206,13 @@ async def run_cli():
     # Command 'list-gallery-gifs'
     subparsers.add_parser(
         "list-gallery-gifs",
-        help="List gifs stored in the server's media/video/gifs gallery",
+        help="List gifs stored in the server's media/gifs gallery",
     )
 
     # Command 'start-random-gifs'
     random_gif_parser = subparsers.add_parser(
         "start-random-gifs",
-        help="Cycle random gifs from media/video/gifs on the Cube as random.gif",
+        help="Cycle random gifs from media/gifs on the Cube as random.gif",
     )
     random_gif_parser.add_argument(
         "--seconds",

@@ -161,7 +161,7 @@ async def get_random_gif_status() -> str:
 async def start_random_cube_gifs(seconds: int = 60) -> dict[str, str]:
     """Requests the server to start cycling random gifs as random.gif on the Cube.
 
-    A new random gif from media/video/gifs is uploaded and displayed every
+    A new random gif from media/gifs is uploaded and displayed every
     `seconds` (default 60 = 1 minute) until stop is requested.
     """
     async with Client(AuthTransport(SERVER_URL)) as client:
@@ -217,7 +217,7 @@ async def list_gallery_images() -> str:
 
 
 async def list_gallery_gifs() -> str:
-    """Fetches the list of gifs stored in the server's media/video/gifs gallery."""
+    """Fetches the list of gifs stored in the server's media/gifs gallery."""
     async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.read_resource("gallery://gifs")
 

@@ -97,7 +97,7 @@ python -m client.main save-image-in-gallery --file path/to/photo.png --name test
 # 🖼️ List the images stored in the server's local gallery (media/images)
 python -m client.main list-gallery-images
 
-# 🎞️ List the gifs stored in the server's local gallery (media/video/gifs)
+# 🎞️ List the gifs stored in the server's local gallery (media/gifs)
 python -m client.main list-gallery-gifs
 
 # ⏱️ Show an image temporarily on the Cube (default 5 s, max 30 s, non-blocking; other formats are converted)
@@ -112,7 +112,7 @@ python -m client.main get-current-random-image
 # 🛑 Stop cycling random images on the Cube (the last random.jpg stays displayed)
 python -m client.main stop-random-images
 
-# 🎲 Start cycling random gifs from media/video/gifs as random.gif (default 60 s, max 3600 s)
+# 🎲 Start cycling random gifs from media/gifs as random.gif (default 60 s, max 3600 s)
 python -m client.main start-random-gifs --seconds 60
 
 # 🔍 Get which temporary gif (random.gif) is currently being used on the Cube

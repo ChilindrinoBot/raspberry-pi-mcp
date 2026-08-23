@@ -61,7 +61,7 @@ class ListLocalGifsTests(unittest.TestCase):
 
         self.assertEqual(gifs, [])
 
-    def test_default_dir_is_media_video_gifs(self) -> None:
+    def test_default_dir_is_media_gifs(self) -> None:
         self.assertEqual(RANDOM_GIF_DIR.name, "gifs")
         self.assertTrue(RANDOM_GIF_DIR.is_dir())
 
