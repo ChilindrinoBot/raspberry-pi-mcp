@@ -73,6 +73,29 @@ _RANDOM_MODE_SUSPENDED: bool = False
 _RANDOM_CURRENT_GIF: str | None = None
 _RANDOM_MODE_LOCK: Final[threading.Lock] = threading.Lock()
 
+# Local folder holding the image pool used by the random image mode.
+RANDOM_IMAGE_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "media" / "images"
+
+# Suffixes accepted in the random image pool. Every picked image is uploaded
+# to the Cube under RANDOM_IMAGE_NAME, so only jpg/jpeg sources make sense.
+LOCAL_IMAGE_SUFFIXES: Final[frozenset[str]] = frozenset({".jpg", ".jpeg"})
+
+# Name under which every picked image is temporarily uploaded to the Cube, so a
+# new random image simply overwrites the previous one.
+RANDOM_IMAGE_NAME: Final[str] = "random.jpg"
+
+RANDOM_IMAGE_DEFAULT_SECONDS: Final[int] = 60
+RANDOM_IMAGE_MIN_SECONDS: Final[int] = 5
+RANDOM_IMAGE_MAX_SECONDS: Final[int] = 3600
+
+# Random image mode state; mirrors the random gif mode state. Both modes share
+# one screen, so starting one stops the other and a temporary gif suspends
+# whichever mode is active until the previous gif is restored.
+_RANDOM_IMAGE_MODE_RUNNING: bool = False
+_RANDOM_IMAGE_MODE_SUSPENDED: bool = False
+_RANDOM_CURRENT_IMAGE: str | None = None
+_RANDOM_IMAGE_MODE_LOCK: Final[threading.Lock] = threading.Lock()
+
 
 def _fetch_cube_gifs() -> list[str]:
     """Fetch the /filelist page from the Cube and extract the available gif paths."""
@@ -314,8 +337,8 @@ def set_cube_gif(gif: str) -> dict[str, str]:
     Displays a gif on the Cube display.
 
     Validates that the gif exists in the Cube's file list before sending the /set request.
-    If the random gif mode is running it is stopped first, so the requested
-    gif stays on screen.
+    If the random gif or random image mode is running it is stopped first, so
+    the requested gif stays on screen.
 
     Args:
         gif: Name (or relative path) of the gif to display on the Cube.
@@ -338,7 +361,8 @@ def set_cube_gif(gif: str) -> dict[str, str]:
             "message": f"Gif not found on Cube: {gif}. Available: {', '.join(available) or 'none'}.",
         }
 
-    was_running, _previous_random = _stop_random_mode()
+    was_running_gif, _previous_random = _stop_random_mode()
+    was_running_image, _previous_random_image = _stop_image_mode()
 
     try:
         response = _set_cube_gif(gif)
@@ -352,8 +376,10 @@ def set_cube_gif(gif: str) -> dict[str, str]:
         }
 
     parts = [f"Cube gif set to: {gif}"]
-    if was_running:
+    if was_running_gif:
         parts.append("Random gif mode stopped.")
+    if was_running_image:
+        parts.append("Random image mode stopped.")
     if response:
         parts.append(f"Device response: {response}")
 
@@ -478,13 +504,15 @@ def upload_cube_image(data: str, filename: str) -> dict[str, str]:
     return {"status": "success", "message": f"Image uploaded to Cube: {name}"}
 
 
-def _restore_previous_gif(previous: str, seconds: int, resume_random: bool = False) -> None:
+def _restore_previous_gif(
+    previous: str, seconds: int, resume_random: bool = False, resume_image: bool = False
+) -> None:
     """Sleep for `seconds` and then restore the previous gif on the Cube.
 
     Runs in a background thread after show_temporary_gif has already replied,
     so any error here cannot be reported back to the client. When
-    `resume_random` is True the suspended random gif mode is resumed after
-    the restore.
+    `resume_random`/`resume_image` is True the suspended random gif/image mode
+    is resumed after the restore.
     """
     global _TEMP_GIF_RUNNING
 
@@ -499,6 +527,8 @@ def _restore_previous_gif(previous: str, seconds: int, resume_random: bool = Fal
             _TEMP_GIF_RUNNING = False
         if resume_random:
             _resume_random_mode()
+        if resume_image:
+            _resume_image_mode()
 
 
 @mcp.tool()
@@ -514,7 +544,8 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
     previous gif. Only one temporary gif can run at a time: while one is being
     shown, new requests are rejected until it finishes. If the random gif mode
     is running it is suspended while the temporary gif is on screen and
-    resumed automatically after the previous gif is restored.
+    resumed automatically after the previous gif is restored. The same applies
+    to the random image mode.
 
     Args:
         data: Image bytes encoded in Base64 (client-side).
@@ -547,24 +578,31 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
     tmp_name = f"{TEMP_GIF_NAME}.gif" if suffix == ".gif" else f"{TEMP_GIF_NAME}.jpg"
 
     was_running_random = _suspend_random_mode()
+    was_running_image = _suspend_image_mode()
 
     try:
         current = _fetch_cube_current_gif()
     except Exception as e:
         if was_running_random:
             _resume_random_mode()
+        if was_running_image:
+            _resume_image_mode()
         return {"status": "error", "message": f"Failed to read current gif from Cube: {e}"}
 
     result = upload_cube_image(data, tmp_name)
     if result["status"] != "success":
         if was_running_random:
             _resume_random_mode()
+        if was_running_image:
+            _resume_image_mode()
         return result
 
     with _TEMP_GIF_LOCK:
         if _TEMP_GIF_RUNNING:
             if was_running_random:
                 _resume_random_mode()
+            if was_running_image:
+                _resume_image_mode()
             return {
                 "status": "error",
                 "message": "A temporary gif is already being shown. Wait for it to finish before starting another.",
@@ -578,6 +616,8 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
             _TEMP_GIF_RUNNING = False
         if was_running_random:
             _resume_random_mode()
+        if was_running_image:
+            _resume_image_mode()
         return {"status": "error", "message": f"Failed to display temporary gif {tmp_name}: {e}"}
 
     if "FAIL" in response.upper():
@@ -585,6 +625,8 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
             _TEMP_GIF_RUNNING = False
         if was_running_random:
             _resume_random_mode()
+        if was_running_image:
+            _resume_image_mode()
         return {
             "status": "error",
             "message": f"Cube refused to display temporary gif {tmp_name}. Response: {response}",
@@ -593,15 +635,15 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
     previous = current.removeprefix(f"{CUBE_IMAGE_DIR}/").lstrip("/")
     threading.Thread(
         target=_restore_previous_gif,
-        args=(previous, clamped, was_running_random),
+        args=(previous, clamped, was_running_random, was_running_image),
         daemon=True,
     ).start()
 
-    paused_note = (
-        " Random gif mode paused (it will resume automatically)."
-        if was_running_random
-        else ""
-    )
+    paused_note = ""
+    if was_running_random:
+        paused_note = " Random gif mode paused (it will resume automatically)."
+    elif was_running_image:
+        paused_note = " Random image mode paused (it will resume automatically)."
 
     if not previous:
         return {
@@ -641,6 +683,28 @@ def _pick_random_gif(exclude: str | None = None) -> Path | None:
     excluded = (exclude or "").lower()
     candidates = [gif for gif in gifs if gif.name.lower() != excluded]
     return random.choice(candidates if candidates else gifs)
+
+
+def _list_local_images() -> list[Path]:
+    """List the .jpg/.jpeg files available in RANDOM_IMAGE_DIR (empty when missing)."""
+    if not RANDOM_IMAGE_DIR.is_dir():
+        return []
+    return sorted(
+        path
+        for path in RANDOM_IMAGE_DIR.iterdir()
+        if path.is_file() and path.suffix.lower() in LOCAL_IMAGE_SUFFIXES
+    )
+
+
+def _pick_random_image(exclude: str | None = None) -> Path | None:
+    """Pick a random image from the local folder, avoiding `exclude` if possible."""
+    images = _list_local_images()
+    if not images:
+        return None
+
+    excluded = (exclude or "").lower()
+    candidates = [image for image in images if image.name.lower() != excluded]
+    return random.choice(candidates if candidates else images)
 
 
 def _is_random_mode_running() -> bool:
@@ -687,6 +751,50 @@ def _resume_random_mode() -> None:
         _RANDOM_MODE_SUSPENDED = False
 
 
+def _is_image_mode_running() -> bool:
+    with _RANDOM_IMAGE_MODE_LOCK:
+        return _RANDOM_IMAGE_MODE_RUNNING
+
+
+def _is_image_mode_suspended() -> bool:
+    with _RANDOM_IMAGE_MODE_LOCK:
+        return _RANDOM_IMAGE_MODE_SUSPENDED
+
+
+def _stop_image_mode() -> tuple[bool, str | None]:
+    """Stop the random image mode entirely. Returns (was_running, current_image)."""
+    global _RANDOM_IMAGE_MODE_RUNNING, _RANDOM_IMAGE_MODE_SUSPENDED
+
+    with _RANDOM_IMAGE_MODE_LOCK:
+        was_running = _RANDOM_IMAGE_MODE_RUNNING
+        _RANDOM_IMAGE_MODE_RUNNING = False
+        _RANDOM_IMAGE_MODE_SUSPENDED = False
+        return was_running, _RANDOM_CURRENT_IMAGE
+
+
+def _suspend_image_mode() -> bool:
+    """Pause the random image loop while a temporary gif borrows the screen.
+
+    Returns True when a running mode was suspended; the loop stays alive but
+    does not cycle until _resume_image_mode is called.
+    """
+    global _RANDOM_IMAGE_MODE_SUSPENDED
+
+    with _RANDOM_IMAGE_MODE_LOCK:
+        if not _RANDOM_IMAGE_MODE_RUNNING:
+            return False
+        _RANDOM_IMAGE_MODE_SUSPENDED = True
+        return True
+
+
+def _resume_image_mode() -> None:
+    """Lift a suspension made by _suspend_image_mode."""
+    global _RANDOM_IMAGE_MODE_SUSPENDED
+
+    with _RANDOM_IMAGE_MODE_LOCK:
+        _RANDOM_IMAGE_MODE_SUSPENDED = False
+
+
 def _is_cube_display_on() -> bool:
     """Return True when the Cube display is on (brightness above zero).
 
@@ -699,6 +807,24 @@ def _is_cube_display_on() -> bool:
         return False
 
 
+def _wait_between_cycles(total_seconds: int, is_running, is_suspended) -> None:
+    """Count total_seconds down in 1s steps, pausing whenever needed.
+
+    The countdown only advances while the mode keeps running, it is not
+    suspended and the Cube display is on; otherwise the wait keeps polling
+    every second without counting down, resuming the cycle afterwards.
+    """
+    remaining = total_seconds
+    while remaining > 0 and is_running():
+        time.sleep(1)
+        if not is_running():
+            break
+        if is_suspended():
+            continue
+        if _is_cube_display_on():
+            remaining -= 1
+
+
 def _sleep_interruptible(total_seconds: int) -> None:
     """Sleep for total_seconds in 1s steps so stop_random_gifs reacts fast.
 
@@ -707,15 +833,12 @@ def _sleep_interruptible(total_seconds: int) -> None:
     gif is being shown, the wait keeps polling every second without counting
     down, resuming the cycle afterwards.
     """
-    remaining = total_seconds
-    while remaining > 0 and _is_random_mode_running():
-        time.sleep(1)
-        if not _is_random_mode_running():
-            break
-        if _is_random_mode_suspended():
-            continue
-        if _is_cube_display_on():
-            remaining -= 1
+    _wait_between_cycles(total_seconds, _is_random_mode_running, _is_random_mode_suspended)
+
+
+def _sleep_interruptible_for_images(total_seconds: int) -> None:
+    """Sleep for total_seconds in 1s steps so stop_random_images reacts fast."""
+    _wait_between_cycles(total_seconds, _is_image_mode_running, _is_image_mode_suspended)
 
 
 def _run_random_cycle(exclude: str | None = None) -> tuple[bool, str]:
@@ -738,6 +861,30 @@ def _run_random_cycle(exclude: str | None = None) -> tuple[bool, str]:
             return False, f"Cube refused to display {RANDOM_GIF_NAME}. Response: {response}"
 
         return True, gif_path.name
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _run_random_image_cycle(exclude: str | None = None) -> tuple[bool, str]:
+    """Upload and display one random local image as random.jpg on the Cube.
+
+    Returns (True, image_name) on success or (False, error_message) on failure.
+    """
+    try:
+        image_path = _pick_random_image(exclude)
+        if image_path is None:
+            return False, f"No .jpg files found in {RANDOM_IMAGE_DIR}."
+
+        encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+        result = upload_cube_image(encoded, RANDOM_IMAGE_NAME)
+        if result["status"] != "success":
+            return False, result["message"]
+
+        response = _set_cube_gif(RANDOM_IMAGE_NAME)
+        if "FAIL" in response.upper():
+            return False, f"Cube refused to display {RANDOM_IMAGE_NAME}. Response: {response}"
+
+        return True, image_path.name
     except Exception as exc:
         return False, str(exc)
 
@@ -766,6 +913,32 @@ def _random_gif_loop(seconds: int, first_gif: str) -> None:
     finally:
         with _RANDOM_MODE_LOCK:
             _RANDOM_MODE_RUNNING = False
+
+
+def _random_image_loop(seconds: int, first_image: str) -> None:
+    """Keep uploading a new random image every `seconds` until the mode stops.
+
+    Runs in a background thread after start_random_images displayed the first
+    image. While the Cube display is off the loop stays paused, and any failed
+    cycle is simply retried after the next wait.
+    """
+    global _RANDOM_IMAGE_MODE_RUNNING, _RANDOM_CURRENT_IMAGE
+
+    previous = first_image
+    try:
+        while _is_image_mode_running():
+            _sleep_interruptible_for_images(seconds)
+            if not _is_image_mode_running():
+                break
+
+            ok, value = _run_random_image_cycle(previous)
+            if ok:
+                with _RANDOM_IMAGE_MODE_LOCK:
+                    _RANDOM_CURRENT_IMAGE = value
+                previous = value
+    finally:
+        with _RANDOM_IMAGE_MODE_LOCK:
+            _RANDOM_IMAGE_MODE_RUNNING = False
 
 
 @mcp.resource("cube://random-gif")
@@ -800,6 +973,38 @@ def get_random_gif_status() -> str:
     return "\n".join(lines)
 
 
+@mcp.resource("cube://random-image")
+def get_random_image_status() -> str:
+    """
+    Returns the state of the random image mode.
+
+    Reports whether the mode is running (or paused because the Cube display
+    is off, or suspended while a temporary gif is shown) and which temporary
+    image (random.jpg) is currently being used.
+    """
+    with _RANDOM_IMAGE_MODE_LOCK:
+        running = _RANDOM_IMAGE_MODE_RUNNING
+        suspended = _RANDOM_IMAGE_MODE_SUSPENDED
+        current = _RANDOM_CURRENT_IMAGE
+
+    if not running:
+        state = "stopped"
+    elif suspended:
+        state = "running (suspended: temporary gif being shown)"
+    elif _is_cube_display_on():
+        state = "running"
+    else:
+        state = "running (paused: Cube display is off)"
+
+    lines = [f"Random image mode: {state}"]
+    if current:
+        lines.append(f"Current temporary image: {current} (uploaded as {RANDOM_IMAGE_NAME})")
+    else:
+        lines.append("No temporary image has been shown yet.")
+
+    return "\n".join(lines)
+
+
 @mcp.tool()
 def start_random_gifs(seconds: int = RANDOM_GIF_DEFAULT_SECONDS) -> dict[str, str]:
     """
@@ -810,7 +1015,8 @@ def start_random_gifs(seconds: int = RANDOM_GIF_DEFAULT_SECONDS) -> dict[str, st
     another random gif replaces it, forever, until stop_random_gifs is called;
     consecutive repeats are avoided when possible. The first gif is shown
     before this call returns. Read the cube://random-gif resource to know
-    which gif is currently being used.
+    which gif is currently being used. If the random image mode is running it
+    is stopped first, so both random modes never fight over the screen.
 
     Args:
         seconds: Seconds each gif stays on screen before switching to the next
@@ -843,6 +1049,8 @@ def start_random_gifs(seconds: int = RANDOM_GIF_DEFAULT_SECONDS) -> dict[str, st
         _RANDOM_MODE_RUNNING = True
         _RANDOM_MODE_SUSPENDED = False
 
+    image_was_running, _previous_image = _stop_image_mode()
+
     current = _RANDOM_CURRENT_GIF
     ok, value = _run_random_cycle(current)
 
@@ -856,13 +1064,14 @@ def start_random_gifs(seconds: int = RANDOM_GIF_DEFAULT_SECONDS) -> dict[str, st
 
     threading.Thread(target=_random_gif_loop, args=(clamped, value), daemon=True).start()
 
-    return {
-        "status": "success",
-        "message": (
-            f"Random gif mode started: {value} is displayed as {RANDOM_GIF_NAME}; "
-            f"a new random gif will be shown every {clamped} seconds."
-        ),
-    }
+    message = (
+        f"Random gif mode started: {value} is displayed as {RANDOM_GIF_NAME}; "
+        f"a new random gif will be shown every {clamped} seconds."
+    )
+    if image_was_running:
+        message += " Random image mode stopped."
+
+    return {"status": "success", "message": message}
 
 
 @mcp.tool()
@@ -881,5 +1090,95 @@ def stop_random_gifs() -> dict[str, str]:
     message = "Random gif mode stopped."
     if current:
         message += f" {current} ({RANDOM_GIF_NAME}) remains displayed."
+
+    return {"status": "success", "message": message}
+
+
+@mcp.tool()
+def start_random_images(seconds: int = RANDOM_IMAGE_DEFAULT_SECONDS) -> dict[str, str]:
+    """
+    Starts cycling random images from media/images on the Cube display.
+
+    Picks a random image from the local images folder, uploads it to the Cube
+    as random.jpg (overwriting the previous one) and displays it. Every
+    `seconds` another random image replaces it, forever, until
+    stop_random_images is called; consecutive repeats are avoided when
+    possible. Images must be exactly 240x240. The first image is shown before
+    this call returns. Read the cube://random-image resource to know which
+    image is currently being used. If the random gif mode is running it is
+    stopped first, so both random modes never fight over the screen.
+
+    Args:
+        seconds: Seconds each image stays on screen before switching to the
+            next random image (default 60 = 1 minute, clamped to [5, 3600]).
+    """
+    global _RANDOM_IMAGE_MODE_RUNNING, _RANDOM_IMAGE_MODE_SUSPENDED, _RANDOM_CURRENT_IMAGE
+
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    with _RANDOM_IMAGE_MODE_LOCK:
+        busy = _RANDOM_IMAGE_MODE_RUNNING
+    if busy:
+        return {
+            "status": "error",
+            "message": "Random image mode is already running. Call stop_random_images first.",
+        }
+
+    clamped = max(RANDOM_IMAGE_MIN_SECONDS, min(RANDOM_IMAGE_MAX_SECONDS, seconds))
+
+    if not _list_local_images():
+        return {"status": "error", "message": f"No .jpg files found in {RANDOM_IMAGE_DIR}."}
+
+    with _RANDOM_IMAGE_MODE_LOCK:
+        if _RANDOM_IMAGE_MODE_RUNNING:
+            return {
+                "status": "error",
+                "message": "Random image mode is already running. Call stop_random_images first.",
+            }
+        _RANDOM_IMAGE_MODE_RUNNING = True
+        _RANDOM_IMAGE_MODE_SUSPENDED = False
+
+    gif_was_running, _previous_gif = _stop_random_mode()
+
+    current = _RANDOM_CURRENT_IMAGE
+    ok, value = _run_random_image_cycle(current)
+
+    if not ok:
+        with _RANDOM_IMAGE_MODE_LOCK:
+            _RANDOM_IMAGE_MODE_RUNNING = False
+        return {"status": "error", "message": f"Failed to display the first random image: {value}"}
+
+    with _RANDOM_IMAGE_MODE_LOCK:
+        _RANDOM_CURRENT_IMAGE = value
+
+    threading.Thread(target=_random_image_loop, args=(clamped, value), daemon=True).start()
+
+    message = (
+        f"Random image mode started: {value} is displayed as {RANDOM_IMAGE_NAME}; "
+        f"a new random image will be shown every {clamped} seconds."
+    )
+    if gif_was_running:
+        message += " Random gif mode stopped."
+
+    return {"status": "success", "message": message}
+
+
+@mcp.tool()
+def stop_random_images() -> dict[str, str]:
+    """
+    Stops the random image cycling started by start_random_images.
+
+    The loop stops picking new images; whatever was uploaded as random.jpg
+    remains displayed on the Cube.
+    """
+    was_running, current = _stop_image_mode()
+
+    if not was_running:
+        return {"status": "success", "message": "Random image mode is not running."}
+
+    message = "Random image mode stopped."
+    if current:
+        message += f" {current} ({RANDOM_IMAGE_NAME}) remains displayed."
 
     return {"status": "success", "message": message}

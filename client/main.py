@@ -26,6 +26,9 @@ from .cube_client import (
     get_random_gif_status,
     start_random_cube_gifs,
     stop_random_cube_gifs,
+    get_random_image_status,
+    start_random_cube_images,
+    stop_random_cube_images,
 )
 
 
@@ -195,6 +198,26 @@ async def run_cli():
         "get-current-random-gif", help="Get which temporary gif (random.gif) is being used"
     )
 
+    # Command 'start-random-images'
+    random_image_parser = subparsers.add_parser(
+        "start-random-images",
+        help="Cycle random images from media/images on the Cube as random.jpg",
+    )
+    random_image_parser.add_argument(
+        "--seconds",
+        type=int,
+        default=60,
+        help="Seconds each image is shown before switching to another random image (default 60)",
+    )
+
+    # Command 'stop-random-images'
+    subparsers.add_parser("stop-random-images", help="Stop cycling random images on the Cube")
+
+    # Command 'get-current-random-image'
+    subparsers.add_parser(
+        "get-current-random-image", help="Get which temporary image (random.jpg) is being used"
+    )
+
     args = parser.parse_args()
 
     try:
@@ -317,6 +340,18 @@ async def run_cli():
         elif args.command == "get-current-random-gif":
             print("Fetching current random gif status...")
             res = await get_random_gif_status()
+            print(f"\n{res}")
+        elif args.command == "start-random-images":
+            print(f"Cycling random images every {args.seconds}s...")
+            res = await start_random_cube_images(args.seconds)
+            print(f"Server Response: {res}")
+        elif args.command == "stop-random-images":
+            print("Stopping random image cycling...")
+            res = await stop_random_cube_images()
+            print(f"Server Response: {res}")
+        elif args.command == "get-current-random-image":
+            print("Fetching current random image status...")
+            res = await get_random_image_status()
             print(f"\n{res}")
         else:
             parser.print_help()

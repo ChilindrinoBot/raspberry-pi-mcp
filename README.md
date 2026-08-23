@@ -5,7 +5,7 @@ A distributed audio management system based on the **Model Context Protocol (MCP
 
 ## 🏗️ Architecture
 The system is split into two main components:
-- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, capture photos/videos from the camera, list the images available on the Cube display, and cycle random gifs on the Cube display.
+- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, capture photos/videos from the camera, list the images available on the Cube display, and cycle random images and random gifs on the Cube display.
 - **`client/`**: A reference Python client that demonstrates how to send audio files and control commands to the server.
 
 ## 🚀 Quick Start
@@ -94,6 +94,15 @@ python -m client.main upload-cube-gif --file path/to/image.gif
 # ⏱️ Show a gif/jpg image temporarily on the Cube (default 5 s, max 30 s, non-blocking)
 python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
 
+# 🎲 Start cycling random images from media/images as random.jpg (must be 240x240, default 60 s, max 3600 s)
+python -m client.main start-random-images --seconds 60
+
+# 🔍 Get which temporary image (random.jpg) is currently being used on the Cube
+python -m client.main get-current-random-image
+
+# 🛑 Stop cycling random images on the Cube (the last random.jpg stays displayed)
+python -m client.main stop-random-images
+
 # 🎲 Start cycling random gifs from media/video/gifs as random.gif (default 60 s, max 3600 s)
 python -m client.main start-random-gifs --seconds 60
 
@@ -140,6 +149,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube current gif (/img.json), gif list, free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif and random gif cycling tools
+│       └── cube.py     # Cube current gif (/img.json), gif list, free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, random image cycling (media/images -> random.jpg) and random gif cycling tools
 └── tests/              # Integration tests
 ```

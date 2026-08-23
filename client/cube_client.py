@@ -149,3 +149,32 @@ async def stop_random_cube_gifs() -> dict[str, str]:
     async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool("stop_random_gifs", {})
         return result.structured_content
+
+
+async def get_random_image_status() -> str:
+    """Fetches the random image mode status (running, current image) from the server resource."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.read_resource("cube://random-image")
+
+        if not result.contents:
+            return "No random image information available for the Cube."
+
+        return result.contents[0].text
+
+
+async def start_random_cube_images(seconds: int = 60) -> dict[str, str]:
+    """Requests the server to start cycling random images as random.jpg on the Cube.
+
+    A new random image from media/images is uploaded and displayed every
+    `seconds` (default 60 = 1 minute) until stop is requested.
+    """
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool("start_random_images", {"seconds": seconds})
+        return result.structured_content
+
+
+async def stop_random_cube_images() -> dict[str, str]:
+    """Requests the server to stop cycling random images on the Cube."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool("stop_random_images", {})
+        return result.structured_content

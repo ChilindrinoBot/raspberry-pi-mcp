@@ -382,6 +382,21 @@ class StartRandomGifsTests(RandomModeStateTestCase):
         self.assertEqual(thread_args, [(5, "x.gif"), (3600, "x.gif")])
 
     @patch("server.display.cube.threading.Thread")
+    @patch(
+        "server.display.cube._stop_image_mode",
+        return_value=(True, "old.jpg"),
+    )
+    @patch("server.display.cube._run_random_cycle", return_value=(True, "first.gif"))
+    @patch("server.display.cube._list_local_gifs", return_value=[Path("first.gif")])
+    def test_stops_running_image_mode_and_reports_it(
+        self, mock_list: Mock, mock_cycle: Mock, mock_stop_image: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = start_random_gifs()
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Random image mode stopped.", result["message"])
+
+    @patch("server.display.cube.threading.Thread")
     @patch("server.display.cube._run_random_cycle", return_value=(True, "first.gif"))
     @patch("server.display.cube._list_local_gifs", return_value=[Path("first.gif")])
     def test_resets_suspension_when_starting(

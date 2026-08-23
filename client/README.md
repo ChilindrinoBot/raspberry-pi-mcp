@@ -83,6 +83,15 @@ python -m client.main upload-cube-gif --file path/to/image.gif
 # ⏱️ Show a gif/jpg image temporarily on the Cube (default 5 s, max 30 s, non-blocking)
 python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
 
+# 🎲 Start cycling random images from media/images as random.jpg (must be 240x240, default 60 s, max 3600 s)
+python -m client.main start-random-images --seconds 60
+
+# 🔍 Get which temporary image (random.jpg) is currently being used on the Cube
+python -m client.main get-current-random-image
+
+# 🛑 Stop cycling random images on the Cube (the last random.jpg stays displayed)
+python -m client.main stop-random-images
+
 # 🎲 Start cycling random gifs from media/video/gifs as random.gif (default 60 s, max 3600 s)
 python -m client.main start-random-gifs --seconds 60
 
@@ -119,6 +128,9 @@ from client.cube_client import (
     turn_cube_display_on,
     upload_cube_image,
     show_temporary_gif,
+    get_random_image_status,
+    start_random_cube_images,
+    stop_random_cube_images,
     get_random_gif_status,
     start_random_cube_gifs,
     stop_random_cube_gifs,
@@ -229,6 +241,20 @@ async def main():
     # restored automatically in the background. Only one at a time.
     result = await show_temporary_gif("path/to/image.gif", seconds=10)
     print(f"Temporary show: {result}")
+
+    # 🎲 Start cycling random images from media/images as random.jpg.
+    # Images must be 240x240. A new random image is uploaded and displayed
+    # every N seconds (default 60).
+    result = await start_random_cube_images(seconds=60)
+    print(f"Random images started: {result}")
+
+    # 🔍 Get which temporary image (random.jpg) is currently being used.
+    status = await get_random_image_status()
+    print(f"Random image status:\n{status}")
+
+    # 🛑 Stop cycling random images (the last random.jpg stays displayed).
+    result = await stop_random_cube_images()
+    print(f"Random images stopped: {result}")
 
     # 🎲 Start cycling random gifs from media/video/gifs as random.gif.
     # A new random gif is uploaded and displayed every N seconds (default 60).
