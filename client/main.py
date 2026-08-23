@@ -30,6 +30,8 @@ from .cube_client import (
     get_random_image_status,
     start_random_cube_images,
     stop_random_cube_images,
+    list_gallery_images,
+    list_gallery_gifs,
 )
 
 
@@ -193,6 +195,18 @@ async def run_cli():
         "--name",
         required=True,
         help="Save name (usually without suffix; .jpg is added automatically, max 25 chars)",
+    )
+
+    # Command 'list-gallery-images'
+    subparsers.add_parser(
+        "list-gallery-images",
+        help="List images stored in the server's media/images gallery",
+    )
+
+    # Command 'list-gallery-gifs'
+    subparsers.add_parser(
+        "list-gallery-gifs",
+        help="List gifs stored in the server's media/video/gifs gallery",
     )
 
     # Command 'start-random-gifs'
@@ -373,6 +387,14 @@ async def run_cli():
         elif args.command == "get-current-random-image":
             print("Fetching current random image status...")
             res = await get_random_image_status()
+            print(f"\n{res}")
+        elif args.command == "list-gallery-images":
+            print("Fetching gallery images...")
+            res = await list_gallery_images()
+            print(f"\n{res}")
+        elif args.command == "list-gallery-gifs":
+            print("Fetching gallery gifs...")
+            res = await list_gallery_gifs()
             print(f"\n{res}")
         else:
             parser.print_help()

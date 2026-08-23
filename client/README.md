@@ -84,6 +84,12 @@ python -m client.main upload-cube-gif --file path/to/image.gif
 # (--name usually has no suffix; .jpg is appended automatically, max 25 chars including it)
 python -m client.main save-image-in-gallery --file path/to/photo.png --name test
 
+# 🖼️ List the images stored in the server's local gallery (media/images)
+python -m client.main list-gallery-images
+
+# 🎞️ List the gifs stored in the server's local gallery (media/video/gifs)
+python -m client.main list-gallery-gifs
+
 # ⏱️ Show an image temporarily on the Cube (default 5 s, max 30 s, non-blocking; other formats are converted)
 python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
 
@@ -133,6 +139,8 @@ from client.cube_client import (
     upload_cube_image,
     save_image_in_gallery,
     show_temporary_gif,
+    list_gallery_images,
+    list_gallery_gifs,
     get_random_image_status,
     start_random_cube_images,
     stop_random_cube_images,
@@ -248,6 +256,14 @@ async def main():
     # max 25 characters including the suffix).
     result = await save_image_in_gallery("path/to/photo.png", "test")
     print(f"Save: {result}")
+
+    # 🖼️ List the images stored in the server's local gallery (media/images).
+    listing = await list_gallery_images()
+    print(f"Gallery images:\n{listing}")
+
+    # 🎞️ List the gifs stored in the server's local gallery (media/video/gifs).
+    listing = await list_gallery_gifs()
+    print(f"Gallery gifs:\n{listing}")
 
     # ⏱️ Show an image temporarily (default 5 s, max 30 s, non-blocking).
     # It is uploaded as tmp.gif/tmp.jpg, displayed and the previous gif is

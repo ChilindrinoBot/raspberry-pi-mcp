@@ -203,3 +203,25 @@ async def stop_random_cube_images() -> dict[str, str]:
     async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool("stop_random_images", {})
         return result.structured_content
+
+
+async def list_gallery_images() -> str:
+    """Fetches the list of images stored in the server's media/images gallery."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.read_resource("gallery://images")
+
+        if not result.contents:
+            return "No gallery image information available."
+
+        return result.contents[0].text
+
+
+async def list_gallery_gifs() -> str:
+    """Fetches the list of gifs stored in the server's media/video/gifs gallery."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.read_resource("gallery://gifs")
+
+        if not result.contents:
+            return "No gallery gif information available."
+
+        return result.contents[0].text

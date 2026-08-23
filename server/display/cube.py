@@ -1173,6 +1173,32 @@ def get_random_image_status() -> str:
     return "\n".join(lines)
 
 
+@mcp.resource("gallery://images")
+def list_gallery_images() -> str:
+    """
+    Returns a list of images available in the local media/images gallery.
+    """
+    images = _list_local_images()
+
+    if not images:
+        return f"No images found in {RANDOM_IMAGE_DIR}."
+
+    return "Available gallery images:\n" + "\n".join(path.name for path in images)
+
+
+@mcp.resource("gallery://gifs")
+def list_gallery_gifs() -> str:
+    """
+    Returns a list of gifs available in the local media/video/gifs gallery.
+    """
+    gifs = _list_local_gifs()
+
+    if not gifs:
+        return f"No gifs found in {RANDOM_GIF_DIR}."
+
+    return "Available gallery gifs:\n" + "\n".join(path.name for path in gifs)
+
+
 @mcp.tool()
 def start_random_gifs(seconds: int = RANDOM_GIF_DEFAULT_SECONDS) -> dict[str, str]:
     """

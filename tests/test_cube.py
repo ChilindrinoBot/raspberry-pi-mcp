@@ -31,6 +31,8 @@ from server.display.cube import (
     _fit_image_to_jpg,
     save_image_in_gallery,
     show_temporary_gif,
+    list_gallery_images,
+    list_gallery_gifs,
     _restore_previous_gif,
     BRIGHTNESS_DEFAULT,
     CUBE_BASE_URL,
@@ -1052,6 +1054,86 @@ class SaveImageInGalleryTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("Processed image must be 240x240", result["message"])
         self.assertFalse((self._tmpdir / "photo.jpg").exists())
+
+
+class GalleryResourcesTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._images_dir = Path(tempfile.mkdtemp())
+        self._gifs_dir = Path(tempfile.mkdtemp())
+        image_patcher = patch.object(cube_module, "RANDOM_IMAGE_DIR", self._images_dir)
+        gif_patcher = patch.object(cube_module, "RANDOM_GIF_DIR", self._gifs_dir)
+        image_patcher.start()
+        gif_patcher.start()
+        self.addCleanup(image_patcher.stop)
+        self.addCleanup(gif_patcher.stop)
+
+    def tearDown(self) -> None:
+        import shutil
+
+        shutil.rmtree(self._images_dir, ignore_errors=True)
+        shutil.rmtree(self._gifs_dir, ignore_errors=True)
+
+    def test_lists_image_names_sorted(self) -> None:
+        (self._images_dir / "b.jpg").write_bytes(b"jpg")
+        (self._images_dir / "a.jpeg").write_bytes(b"jpeg")
+
+        result = list_gallery_images()
+
+        self.assertEqual(result, "Available gallery images:\na.jpeg\nb.jpg")
+
+    def test_ignores_non_image_files_in_images_gallery(self) -> None:
+        (self._images_dir / "photo.jpg").write_bytes(b"jpg")
+        (self._images_dir / "notes.txt").write_bytes(b"text")
+        (self._images_dir / "clip.gif").write_bytes(b"gif")
+
+        result = list_gallery_images()
+
+        self.assertEqual(result, "Available gallery images:\nphoto.jpg")
+
+    def test_reports_no_images_when_gallery_empty(self) -> None:
+        result = list_gallery_images()
+
+        self.assertTrue(result.startswith("No images found in"))
+
+    def test_reports_no_images_when_gallery_missing(self) -> None:
+        import shutil
+
+        shutil.rmtree(self._images_dir, ignore_errors=True)
+
+        result = list_gallery_images()
+
+        self.assertTrue(result.startswith("No images found in"))
+
+    def test_lists_gif_names_sorted(self) -> None:
+        (self._gifs_dir / "b.gif").write_bytes(b"gif")
+        (self._gifs_dir / "a.gif").write_bytes(b"gif")
+
+        result = list_gallery_gifs()
+
+        self.assertEqual(result, "Available gallery gifs:\na.gif\nb.gif")
+
+    def test_ignores_non_gif_files_in_gifs_gallery(self) -> None:
+        (self._gifs_dir / "anim.gif").write_bytes(b"gif")
+        (self._gifs_dir / "photo.jpg").write_bytes(b"jpg")
+        (self._gifs_dir / "notes.txt").write_bytes(b"text")
+
+        result = list_gallery_gifs()
+
+        self.assertEqual(result, "Available gallery gifs:\nanim.gif")
+
+    def test_reports_no_gifs_when_gallery_empty(self) -> None:
+        result = list_gallery_gifs()
+
+        self.assertTrue(result.startswith("No gifs found in"))
+
+    def test_reports_no_gifs_when_gallery_missing(self) -> None:
+        import shutil
+
+        shutil.rmtree(self._gifs_dir, ignore_errors=True)
+
+        result = list_gallery_gifs()
+
+        self.assertTrue(result.startswith("No gifs found in"))
 
 
 class ShowTemporaryGifTests(unittest.TestCase):

@@ -17,6 +17,8 @@ from client.cube_client import (
     upload_cube_image,
     save_image_in_gallery,
     show_temporary_gif,
+    list_gallery_images,
+    list_gallery_gifs,
 )
 
 
@@ -696,6 +698,54 @@ class ShowTemporaryGifClientTests(unittest.TestCase):
     def test_raises_when_file_missing(self) -> None:
         with self.assertRaises(OSError):
             asyncio.run(show_temporary_gif("/nonexistent/path/test.gif"))
+
+
+class ListGalleryClientTests(unittest.TestCase):
+    @patch("client.cube_client.Client")
+    def test_reads_gallery_images_resource(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type(
+            "Obj", (), {"contents": [type("Obj", (), {"text": "Available gallery images:\nfoto.jpg"})()]}
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(list_gallery_images())
+
+        mock_client.read_resource.assert_called_once_with("gallery://images")
+        self.assertIn("foto.jpg", result)
+
+    @patch("client.cube_client.Client")
+    def test_returns_fallback_when_images_empty(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type("Obj", (), {"contents": []})()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(list_gallery_images())
+
+        self.assertEqual(result, "No gallery image information available.")
+
+    @patch("client.cube_client.Client")
+    def test_reads_gallery_gifs_resource(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type(
+            "Obj", (), {"contents": [type("Obj", (), {"text": "Available gallery gifs:\ngif1.gif"})()]}
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(list_gallery_gifs())
+
+        mock_client.read_resource.assert_called_once_with("gallery://gifs")
+        self.assertIn("gif1.gif", result)
+
+    @patch("client.cube_client.Client")
+    def test_returns_fallback_when_gifs_empty(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type("Obj", (), {"contents": []})()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(list_gallery_gifs())
+
+        self.assertEqual(result, "No gallery gif information available.")
 
 
 if __name__ == "__main__":
