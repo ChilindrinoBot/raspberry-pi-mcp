@@ -23,8 +23,16 @@ from .audio import (
 )
 from .display import (
     list_cube_gifs,
+    get_cube_current_gif,
     get_cube_free_space,
     set_cube_gif,
+    get_cube_brightness,
+    set_cube_brightness,
+    turn_cube_display_off,
+    turn_cube_display_on,
+    upload_cube_image,
+    save_image_in_gallery,
+    show_temporary_gif,
     get_random_image_status,
     start_random_images,
     stop_random_images,
@@ -33,10 +41,10 @@ from .display import (
     stop_random_gifs,
 )
 from .image import take_photo
-from .video.video import record_video
+from .video import record_video
 
 __all__ = [
-    "mcp", 
+    "mcp",
     "play_audio",
     "stop_audio",
     "notify_audio",
@@ -53,8 +61,16 @@ __all__ = [
     "get_mic_mute_state_resource",
     "get_mic_volume",
     "list_cube_gifs",
+    "get_cube_current_gif",
     "get_cube_free_space",
     "set_cube_gif",
+    "get_cube_brightness",
+    "set_cube_brightness",
+    "turn_cube_display_off",
+    "turn_cube_display_on",
+    "upload_cube_image",
+    "save_image_in_gallery",
+    "show_temporary_gif",
     "get_random_image_status",
     "start_random_images",
     "stop_random_images",

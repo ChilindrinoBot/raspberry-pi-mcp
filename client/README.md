@@ -77,10 +77,14 @@ python -m client.main turn-cube-off
 # ☀️ Turn on the Cube display (restores the remembered brightness, default 50)
 python -m client.main turn-cube-on
 
-# 📤 Upload a gif/jpg image (must be 240x240) to the Cube display (sent Base64-encoded)
+# 📤 Upload an image to the Cube display (sent Base64-encoded; gif/jpg must be 240x240, other formats are converted)
 python -m client.main upload-cube-gif --file path/to/image.gif
 
-# ⏱️ Show a gif/jpg image temporarily on the Cube (default 5 s, max 30 s, non-blocking)
+# 💾 Save any image in the server's media/images pool, resized/padded to exactly 240x240 JPEG
+# (--name usually has no suffix; .jpg is appended automatically, max 25 chars including it)
+python -m client.main save-image-in-gallery --file path/to/photo.png --name test
+
+# ⏱️ Show an image temporarily on the Cube (default 5 s, max 30 s, non-blocking; other formats are converted)
 python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
 
 # 🎲 Start cycling random images from media/images as random.jpg (must be 240x240, default 60 s, max 3600 s)
@@ -127,6 +131,7 @@ from client.cube_client import (
     turn_cube_display_off,
     turn_cube_display_on,
     upload_cube_image,
+    save_image_in_gallery,
     show_temporary_gif,
     get_random_image_status,
     start_random_cube_images,
@@ -230,13 +235,21 @@ async def main():
     result = await turn_cube_display_on()
     print(f"Cube display on: {result}")
 
-    # 📤 Upload a gif/jpg image (must be 240x240) to the Cube display.
-    # The file is read locally, Base64-encoded and sent to the server
-    # without any filesystem path.
+    # 📤 Upload an image to the Cube display.
+    # Gif/jpg images must be exactly 240x240; any other format (png, webp...)
+    # is converted server-side to a 240x240 JPEG. The file is read locally,
+    # Base64-encoded and sent to the server without any filesystem path.
     result = await upload_cube_image("path/to/image.gif")
     print(f"Upload: {result}")
 
-    # ⏱️ Show a gif/jpg image temporarily (default 5 s, max 30 s, non-blocking).
+    # 💾 Save any image into the server's media/images pool, resized/padded
+    # to exactly 240x240 JPEG. Pass the desired save name (usually without
+    # suffix; a trailing .jpg/.png is stripped and ".jpg" is always appended,
+    # max 25 characters including the suffix).
+    result = await save_image_in_gallery("path/to/photo.png", "test")
+    print(f"Save: {result}")
+
+    # ⏱️ Show an image temporarily (default 5 s, max 30 s, non-blocking).
     # It is uploaded as tmp.gif/tmp.jpg, displayed and the previous gif is
     # restored automatically in the background. Only one at a time.
     result = await show_temporary_gif("path/to/image.gif", seconds=10)

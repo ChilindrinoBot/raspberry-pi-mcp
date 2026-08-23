@@ -28,6 +28,8 @@ from server.display.cube import (
     _upload_cube_image,
     _is_in_cube_filelist,
     upload_cube_image,
+    _fit_image_to_jpg,
+    save_image_in_gallery,
     show_temporary_gif,
     _restore_previous_gif,
     BRIGHTNESS_DEFAULT,
@@ -590,6 +592,18 @@ def _image_bytes(fmt: str, width: int, height: int) -> bytes:
     return buffer.getvalue()
 
 
+def _solid_image_bytes(fmt: str, width: int, height: int, color) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (width, height), color).save(buffer, format=fmt)
+    return buffer.getvalue()
+
+
+def _rgba_image_bytes(width: int, height: int, color, alpha: int) -> bytes:
+    buffer = BytesIO()
+    Image.new("RGBA", (width, height), color + (alpha,)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 class ImageDimensionsTests(unittest.TestCase):
     def test_reads_gif_size(self) -> None:
         self.assertEqual(_image_dimensions(_image_bytes("GIF", 240, 240)), (240, 240))
@@ -701,18 +715,46 @@ class UploadCubeImageTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("CUBE_BASE_URL is not configured", result["message"])
 
-    def test_rejects_unsupported_extension(self) -> None:
-        result = upload_cube_image(self._encoded(b"data"), "picture.png")
+    @patch("server.display.cube._fetch_cube_gifs", return_value=["image/photo.jpg"])
+    @patch("server.display.cube._fetch_cube_space", return_value=(1024 * 1024, 3 * 1024 * 1024))
+    @patch("server.display.cube._upload_cube_image")
+    def test_converts_png_to_exact_240_jpeg_instead_of_rejecting(
+        self, mock_upload: Mock, mock_space: Mock, mock_gifs: Mock
+    ) -> None:
+        result = upload_cube_image(self._encoded(_image_bytes("PNG", 500, 300)), "photo.png")
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["message"], "Image uploaded to Cube: photo.jpg")
+        uploaded_name, payload = mock_upload.call_args[0]
+        self.assertEqual(uploaded_name, "photo.jpg")
+        with Image.open(BytesIO(payload)) as img:
+            self.assertEqual(img.format, "JPEG")
+            self.assertEqual(img.size, (240, 240))
+
+    @patch("server.display.cube._fetch_cube_space")
+    def test_returns_error_when_conversion_fails(self, mock_space: Mock) -> None:
+        result = upload_cube_image(self._encoded(b"data"), "picture.webp")
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("Unsupported file type: .png", result["message"])
-        self.assertIn(".gif, .jpg, .jpeg", result["message"])
+        self.assertIn("Failed to convert image picture.webp to JPEG", result["message"])
+        mock_space.assert_not_called()
 
-    def test_rejects_filename_without_extension(self) -> None:
+    def test_returns_error_when_nameless_format_cannot_be_converted(self) -> None:
         result = upload_cube_image(self._encoded(b"data"), "noext")
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("Unsupported file type: none", result["message"])
+        self.assertIn("Failed to convert image noext to JPEG", result["message"])
+
+    def test_converts_png_keeping_basename_with_jpg_suffix(self) -> None:
+        with patch("server.display.cube._fetch_cube_gifs", return_value=["image/tmp.jpg"]):
+            with patch("server.display.cube._fetch_cube_space", return_value=(1024 * 1024, 3 * 1024 * 1024)):
+                with patch("server.display.cube._upload_cube_image") as mock_upload:
+                    result = upload_cube_image(
+                        self._encoded(_image_bytes("PNG", 300, 300)), "/etc/passwd/tmp.PNG"
+                    )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(mock_upload.call_args[0][0], "tmp.jpg")
 
     def test_rejects_empty_filename(self) -> None:
         result = upload_cube_image(self._encoded(b"data"), "  ")
@@ -815,6 +857,201 @@ class UploadCubeImageTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("Upload could not be confirmed", result["message"])
         self.assertIn("missing.gif is not in the Cube file list", result["message"])
+
+
+def _pixel_close(pixel, expected, tolerance: int = 30) -> bool:
+    return all(abs(channel - target) <= tolerance for channel, target in zip(pixel[:3], expected))
+
+
+class FitImageToJpgHelperTests(unittest.TestCase):
+    def test_landscape_image_is_padded_top_and_bottom(self) -> None:
+        processed = _fit_image_to_jpg(_solid_image_bytes("PNG", 480, 120, "red"))
+
+        with Image.open(BytesIO(processed)) as img:
+            self.assertEqual(img.format, "JPEG")
+            self.assertEqual(img.size, (240, 240))
+            rgb = img.convert("RGB")
+            self.assertTrue(_pixel_close(rgb.getpixel((0, 0)), (0, 0, 0)))
+            self.assertTrue(_pixel_close(rgb.getpixel((239, 0)), (0, 0, 0)))
+            self.assertTrue(_pixel_close(rgb.getpixel((120, 120)), (255, 0, 0)))
+
+    def test_portrait_image_is_padded_on_the_sides(self) -> None:
+        processed = _fit_image_to_jpg(_solid_image_bytes("PNG", 120, 480, "red"))
+
+        with Image.open(BytesIO(processed)) as img:
+            self.assertEqual(img.format, "JPEG")
+            self.assertEqual(img.size, (240, 240))
+            rgb = img.convert("RGB")
+            self.assertTrue(_pixel_close(rgb.getpixel((0, 0)), (0, 0, 0)))
+            self.assertTrue(_pixel_close(rgb.getpixel((0, 239)), (0, 0, 0)))
+            self.assertTrue(_pixel_close(rgb.getpixel((120, 120)), (255, 0, 0)))
+
+    def test_exact_240_image_fills_canvas_without_padding(self) -> None:
+        processed = _fit_image_to_jpg(_solid_image_bytes("JPEG", 240, 240, "red"))
+
+        with Image.open(BytesIO(processed)) as img:
+            self.assertEqual(img.format, "JPEG")
+            self.assertEqual(img.size, (240, 240))
+            rgb = img.convert("RGB")
+            self.assertTrue(_pixel_close(rgb.getpixel((0, 0)), (255, 0, 0)))
+            self.assertTrue(_pixel_close(rgb.getpixel((239, 239)), (255, 0, 0)))
+
+    def test_small_image_is_not_upscaled(self) -> None:
+        processed = _fit_image_to_jpg(_solid_image_bytes("PNG", 100, 100, "red"))
+
+        with Image.open(BytesIO(processed)) as img:
+            rgb = img.convert("RGB")
+            self.assertTrue(_pixel_close(rgb.getpixel((50, 50)), (0, 0, 0)))
+            self.assertTrue(_pixel_close(rgb.getpixel((75, 75)), (255, 0, 0)))
+
+    def test_transparent_areas_are_flattened_over_black(self) -> None:
+        processed = _fit_image_to_jpg(_rgba_image_bytes(480, 480, (255, 0, 0), alpha=0))
+
+        with Image.open(BytesIO(processed)) as img:
+            self.assertEqual(img.mode, "RGB")
+            rgb = img.convert("RGB")
+            self.assertTrue(_pixel_close(rgb.getpixel((120, 120)), (0, 0, 0)))
+
+    def test_invalid_data_raises(self) -> None:
+        with self.assertRaises(Exception):
+            _fit_image_to_jpg(b"not an image")
+
+    def test_empty_data_raises(self) -> None:
+        with self.assertRaises(Exception):
+            _fit_image_to_jpg(b"")
+
+
+class SaveImageInGalleryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = Path(tempfile.mkdtemp())
+        patcher = patch.object(cube_module, "RANDOM_IMAGE_DIR", self._tmpdir)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def tearDown(self) -> None:
+        import shutil
+
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def _encoded(self, data: bytes) -> str:
+        return base64.b64encode(data).decode()
+
+    def test_saves_png_as_240x240_jpg_in_images_dir(self) -> None:
+        result = save_image_in_gallery(self._encoded(_image_bytes("PNG", 500, 300)), "photo.png")
+
+        self.assertEqual(result["status"], "success")
+        saved = self._tmpdir / "photo.jpg"
+        self.assertTrue(saved.is_file())
+        with Image.open(saved) as img:
+            self.assertEqual(img.format, "JPEG")
+            self.assertEqual(img.size, (240, 240))
+
+    def test_saves_with_plain_name_without_suffix(self) -> None:
+        result = save_image_in_gallery(self._encoded(_image_bytes("PNG", 500, 300)), "test")
+
+        self.assertEqual(result["status"], "success")
+        self.assertTrue((self._tmpdir / "test.jpg").is_file())
+
+    def test_strips_trailing_jpg_suffix_from_name(self) -> None:
+        result = save_image_in_gallery(self._encoded(_image_bytes("PNG", 300, 300)), "test.jpg")
+
+        self.assertEqual(result["status"], "success")
+        self.assertTrue((self._tmpdir / "test.jpg").is_file())
+        self.assertFalse((self._tmpdir / "test.jpg.jpg").exists())
+
+    def test_keeps_dots_when_suffix_is_not_an_image_extension(self) -> None:
+        result = save_image_in_gallery(self._encoded(_image_bytes("PNG", 300, 300)), "my.image")
+
+        self.assertEqual(result["status"], "success")
+        self.assertTrue((self._tmpdir / "my.image.jpg").is_file())
+
+    def test_normalizes_extension_and_name_to_jpg(self) -> None:
+        result = save_image_in_gallery(self._encoded(_image_bytes("GIF", 300, 300)), "pic.JPEG")
+
+        self.assertEqual(result["status"], "success")
+        self.assertTrue((self._tmpdir / "pic.jpg").is_file())
+        self.assertFalse((self._tmpdir / "pic.JPEG").exists())
+
+    def test_rejects_saved_name_longer_than_25_characters_with_suffix(self) -> None:
+        result = save_image_in_gallery(self._encoded(_image_bytes("PNG", 300, 300)), "a" * 22 + ".png")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image name is too long", result["message"])
+        self.assertIn(f"Max is {cube_module.IMAGE_NAME_MAX_LENGTH} characters", result["message"])
+
+    def test_rejects_saved_name_longer_than_25_characters(self) -> None:
+        result = save_image_in_gallery(self._encoded(_image_bytes("PNG", 300, 300)), "a" * 25)
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image name is too long", result["message"])
+        self.assertIn(f"Max is {cube_module.IMAGE_NAME_MAX_LENGTH} characters", result["message"])
+
+    def test_accepts_saved_name_with_exactly_25_characters(self) -> None:
+        result = save_image_in_gallery(self._encoded(_image_bytes("PNG", 300, 300)), "a" * 21)
+
+        self.assertEqual(result["status"], "success")
+        self.assertTrue((self._tmpdir / f"{'a' * 21}.jpg").is_file())
+
+    def test_creates_missing_images_dir(self) -> None:
+        nested = self._tmpdir / "nested"
+
+        with patch.object(cube_module, "RANDOM_IMAGE_DIR", nested):
+            result = save_image_in_gallery(self._encoded(_image_bytes("PNG", 300, 300)), "deep.png")
+
+        self.assertEqual(result["status"], "success")
+        self.assertTrue((nested / "deep.jpg").is_file())
+
+    def test_rejects_empty_name(self) -> None:
+        result = save_image_in_gallery(self._encoded(b"data"), "   ")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image name is required", result["message"])
+
+    def test_rejects_dotfile_style_name(self) -> None:
+        result = save_image_in_gallery(self._encoded(b"data"), ".png")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image name is required", result["message"])
+
+    def test_rejects_malformed_base64(self) -> None:
+        result = save_image_in_gallery("not-valid-base64!!!", "photo.png")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to decode image photo.png", result["message"])
+
+    @patch("server.display.cube._decode_image", return_value=b"")
+    def test_rejects_empty_payload(self, mock_decode: Mock) -> None:
+        result = save_image_in_gallery("token", "empty.png")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image is empty: empty.png", result["message"])
+
+    @patch(
+        "server.display.cube._fit_image_to_jpg",
+        side_effect=RuntimeError("cannot identify image file"),
+    )
+    def test_returns_error_when_processing_fails(self, mock_fit: Mock) -> None:
+        result = save_image_in_gallery(self._encoded(b"data"), "broken.png")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to process image broken.png", result["message"])
+        mock_fit.assert_called_once()
+
+    @patch("server.display.cube._fit_image_to_jpg", return_value=b"not-a-jpeg")
+    def test_verifies_processed_output_is_jpeg(self, mock_fit: Mock) -> None:
+        result = save_image_in_gallery(self._encoded(b"data"), "photo.png")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Processed image is not a valid JPEG", result["message"])
+        self.assertFalse((self._tmpdir / "photo.jpg").exists())
+
+    @patch("server.display.cube._fit_image_to_jpg", return_value=_image_bytes("JPEG", 100, 100))
+    def test_verifies_processed_output_dimensions(self, mock_fit: Mock) -> None:
+        result = save_image_in_gallery(self._encoded(b"data"), "photo.png")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Processed image must be 240x240", result["message"])
+        self.assertFalse((self._tmpdir / "photo.jpg").exists())
 
 
 class ShowTemporaryGifTests(unittest.TestCase):
@@ -936,20 +1173,37 @@ class ShowTemporaryGifTests(unittest.TestCase):
         mock_upload.assert_not_called()
         mock_thread_cls.assert_not_called()
 
-    def test_rejects_unsupported_extension(self) -> None:
-        with patch("server.display.cube.upload_cube_image") as mock_upload:
-            result = show_temporary_gif(self._encoded(b"data"), "picture.png")
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    def test_converts_png_to_tmp_jpg_before_uploading(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(_image_bytes("PNG", 500, 300)), "picture.png")
+
+        self.assertEqual(result["status"], "success")
+        encoded, name = mock_upload.call_args[0]
+        self.assertEqual(name, "tmp.jpg")
+        with Image.open(BytesIO(base64.b64decode(encoded))) as img:
+            self.assertEqual(img.format, "JPEG")
+            self.assertEqual(img.size, (240, 240))
+
+    @patch("server.display.cube.upload_cube_image")
+    def test_returns_error_when_conversion_fails(self, mock_upload: Mock) -> None:
+        result = show_temporary_gif(self._encoded(b"data"), "picture.webp")
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("Unsupported file type: .png", result["message"])
+        self.assertIn("Failed to convert image picture.webp to JPEG", result["message"])
         mock_upload.assert_not_called()
 
-    def test_rejects_filename_without_extension(self) -> None:
+    def test_returns_error_when_nameless_format_cannot_be_converted(self) -> None:
         with patch("server.display.cube.upload_cube_image") as mock_upload:
             result = show_temporary_gif(self._encoded(b"data"), "noext")
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("Unsupported file type: none", result["message"])
+        self.assertIn("Failed to convert image noext to JPEG", result["message"])
+        mock_upload.assert_not_called()
 
     def test_returns_error_when_not_configured(self) -> None:
         with patch("server.display.cube.CUBE_BASE_URL", ""):

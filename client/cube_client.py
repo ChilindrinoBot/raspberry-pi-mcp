@@ -87,10 +87,12 @@ def _encode_image(data: bytes) -> str:
 
 
 async def upload_cube_image(file_path: str) -> dict[str, str]:
-    """Uploads a local gif/jpg image (240x240) to the Cube display.
+    """Uploads a local image to the Cube display.
 
-    The file is read locally, Base64-encoded and sent to the server without
-    any filesystem path.
+    Gif/jpg images must be exactly 240x240; any other format (png, webp...)
+    is converted server-side to an exact 240x240 JPEG and stored as
+    <name>.jpg. The file is read locally, Base64-encoded and sent to the
+    server without any filesystem path.
     """
     path = Path(file_path.strip())
     data = path.read_bytes()
@@ -105,10 +107,12 @@ async def upload_cube_image(file_path: str) -> dict[str, str]:
 
 
 async def show_temporary_gif(file_path: str, seconds: int = 5) -> dict[str, str]:
-    """Shows a local gif/jpg image (240x240) temporarily on the Cube display.
+    """Shows a local image temporarily on the Cube display.
 
-    The file is uploaded as tmp.gif/tmp.jpg, displayed for the given seconds
-    (default 5, max 30) and afterwards the previous gif is restored.
+    Gif/jpg images must be exactly 240x240; any other format is converted
+    server-side to a 240x240 JPEG. The file is uploaded as tmp.gif/tmp.jpg,
+    displayed for the given seconds (default 5, max 30) and afterwards the
+    previous gif is restored.
     """
     path = Path(file_path.strip())
     data = path.read_bytes()
@@ -118,6 +122,27 @@ async def show_temporary_gif(file_path: str, seconds: int = 5) -> dict[str, str]
         result = await client.call_tool(
             "show_temporary_gif",
             {"data": encoded, "filename": path.name, "seconds": seconds},
+        )
+        return result.structured_content
+
+
+async def save_image_in_gallery(file_path: str, name: str) -> dict[str, str]:
+    """Saves a local image into the server's media/images pool for the Cube.
+
+    The file is read locally, Base64-encoded and sent to the server together
+    with `name`, the desired save name (usually without suffix; a trailing
+    image suffix like .jpg/.png is stripped and ".jpg" is always appended,
+    max 25 characters). The server resizes/pads the image to exactly 240x240
+    and converts it to JPEG.
+    """
+    path = Path(file_path.strip())
+    data = path.read_bytes()
+    encoded = _encode_image(data)
+
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool(
+            "save_image_in_gallery",
+            {"data": encoded, "name": name},
         )
         return result.structured_content
 

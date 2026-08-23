@@ -15,6 +15,7 @@ from client.cube_client import (
     turn_cube_display_off,
     turn_cube_display_on,
     upload_cube_image,
+    save_image_in_gallery,
     show_temporary_gif,
 )
 
@@ -519,6 +520,89 @@ class UploadCubeImageClientTests(unittest.TestCase):
     def test_raises_when_file_missing(self) -> None:
         with self.assertRaises(OSError):
             asyncio.run(upload_cube_image("/nonexistent/path/test.gif"))
+
+
+class SaveImageInGalleryClientTests(unittest.TestCase):
+    PNG_DATA = b"\x89PNG\r\n\x1a\n" + b"fakepngdata"
+
+    def _write_temp_png(self) -> Path:
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        path = Path(tmp_dir.name) / "photo.png"
+        path.write_bytes(self.PNG_DATA)
+        return path
+
+    @patch("client.cube_client.Client")
+    def test_connects_to_http_server(self, MockClient) -> None:
+        """save_image_in_gallery must connect to the configured HTTP URL."""
+        path = self._write_temp_png()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "saved"}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(save_image_in_gallery(str(path), "vacaciones"))
+
+        MockClient.assert_called_once()
+
+    @patch("client.cube_client.Client")
+    def test_sends_base64_data_and_requested_name(self, MockClient) -> None:
+        path = self._write_temp_png()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "saved"}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(save_image_in_gallery(str(path), "vacaciones"))
+
+        name, args = mock_client.call_tool.call_args[0]
+        self.assertEqual(name, "save_image_in_gallery")
+        self.assertEqual(args["name"], "vacaciones")
+        self.assertNotIn(str(path), args["data"])
+        # The sent payload must decode back to the original file bytes.
+        self.assertEqual(base64.b64decode(args["data"]), self.PNG_DATA)
+
+    @patch("client.cube_client.Client")
+    def test_returns_success(self, MockClient) -> None:
+        path = self._write_temp_png()
+        ctx, mock_client = _make_client_mock()
+        expected = {
+            "status": "success",
+            "message": "Image saved to media/images: vacaciones.jpg (240x240 JPEG).",
+        }
+        mock_client.call_tool.return_value = type("Obj", (), {"structured_content": expected})()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(save_image_in_gallery(str(path), "vacaciones"))
+
+        self.assertEqual(result, expected)
+
+    @patch("client.cube_client.Client")
+    def test_returns_when_server_rejects(self, MockClient) -> None:
+        path = self._write_temp_png()
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj",
+            (),
+            {
+                "structured_content": {
+                    "status": "error",
+                    "message": "Image name is too long: photo.jpg (26 characters). Max is 25 characters.",
+                }
+            },
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(save_image_in_gallery(str(path), "photo"))
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image name is too long", result["message"])
+
+    def test_raises_when_file_missing(self) -> None:
+        with self.assertRaises(OSError):
+            asyncio.run(save_image_in_gallery("/nonexistent/path/photo.png", "photo"))
 
 
 class ShowTemporaryGifClientTests(unittest.TestCase):

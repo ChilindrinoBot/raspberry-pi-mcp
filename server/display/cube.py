@@ -15,7 +15,7 @@ from typing import Final
 
 import httpx
 from dotenv import load_dotenv
-from PIL import Image
+from PIL import Image, ImageOps
 
 from .. import mcp
 
@@ -39,6 +39,17 @@ _REMEMBERED_BRIGHTNESS: int | None = None
 CUBE_IMAGE_DIR: Final[str] = "/image"
 ALLOWED_UPLOAD_SUFFIXES: Final[frozenset[str]] = frozenset({".gif", ".jpg", ".jpeg"})
 IMAGE_REQUIRED_DIMENSIONS: Final[tuple[int, int]] = (240, 240)
+
+JPEG_SAVE_QUALITY: Final[int] = 90
+
+# Maximum length of the .jpg name stored in media/images by save_image_in_gallery.
+IMAGE_NAME_MAX_LENGTH: Final[int] = 25
+
+# Trailing suffixes stripped from the save name sent to save_image_in_gallery, which
+# usually arrives without any suffix; anything else is kept as part of the name.
+STRIPPABLE_IMAGE_SUFFIXES: Final[frozenset[str]] = frozenset(
+    {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"}
+)
 
 TEMP_GIF_NAME: Final[str] = "tmp"
 TEMP_GIF_DEFAULT_SECONDS: Final[int] = 5
@@ -421,6 +432,24 @@ def _decode_image(data: str) -> bytes:
     return base64.b64decode(data, validate=True)
 
 
+def _to_cube_compatible_image(name: str, payload: bytes) -> tuple[str, bytes, str | None]:
+    """Convert unsupported image formats to an exact 240x240 JPEG.
+
+    Gifs and jpegs are returned untouched (their exact 240x240 dimensions are
+    validated afterwards); any other format (png, webp, bmp...) is converted
+    with _fit_image_to_jpg and its name gets a .jpg suffix. On failure the
+    error message is returned and the payload is left empty.
+    """
+    suffix = Path(name).suffix.lower()
+    if suffix in ALLOWED_UPLOAD_SUFFIXES:
+        return name, payload, None
+
+    try:
+        return f"{Path(name).stem}.jpg", _fit_image_to_jpg(payload), None
+    except Exception as e:
+        return name, b"", f"Failed to convert image {name} to JPEG: {e}"
+
+
 @mcp.tool()
 def upload_cube_image(data: str, filename: str) -> dict[str, str]:
     """
@@ -429,7 +458,9 @@ def upload_cube_image(data: str, filename: str) -> dict[str, str]:
     The image bytes must be Base64-encoded by the client. After decoding, the
     file is validated: allowed extension (.gif, .jpg, .jpeg), dimensions
     exactly 240x240, and enough free space on the Cube before uploading it to
-    the /image directory via /doUpload.
+    the /image directory via /doUpload. Other formats (png, webp, bmp...) are
+    not rejected: they are automatically converted to an exact 240x240 JPEG
+    and their name gets a .jpg suffix.
 
     Args:
         data: Image bytes encoded in Base64 (client-side).
@@ -442,13 +473,6 @@ def upload_cube_image(data: str, filename: str) -> dict[str, str]:
     if not name:
         return {"status": "error", "message": "Filename is required."}
 
-    suffix = Path(name).suffix.lower()
-    if suffix not in ALLOWED_UPLOAD_SUFFIXES:
-        return {
-            "status": "error",
-            "message": f"Unsupported file type: {suffix or 'none'}. Allowed: .gif, .jpg, .jpeg.",
-        }
-
     try:
         payload = _decode_image(data)
     except Exception as e:
@@ -456,6 +480,10 @@ def upload_cube_image(data: str, filename: str) -> dict[str, str]:
 
     if not payload:
         return {"status": "error", "message": f"Image is empty: {name}."}
+
+    name, payload, conversion_error = _to_cube_compatible_image(name, payload)
+    if conversion_error:
+        return {"status": "error", "message": conversion_error}
 
     dimensions = _image_dimensions(payload)
     if dimensions is None:
@@ -504,6 +532,137 @@ def upload_cube_image(data: str, filename: str) -> dict[str, str]:
     return {"status": "success", "message": f"Image uploaded to Cube: {name}"}
 
 
+def _fit_image_to_jpg(data: bytes) -> bytes:
+    """Scale an image to fit inside 240x240 and pad it with black up to exactly 240x240.
+
+    The aspect ratio is preserved: the image is only scaled down when larger
+    than the target, then centered on a black 240x240 canvas (black bars on
+    the sides or top/bottom as needed) and encoded as JPEG. Transparent areas
+    are composited over black so the JPEG output has no alpha channel.
+    """
+    with Image.open(BytesIO(data)) as img:
+        img = ImageOps.exif_transpose(img)
+
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            rgba = img.convert("RGBA")
+            flattened = Image.new("RGB", rgba.size, (0, 0, 0))
+            flattened.paste(rgba, mask=rgba.split()[-1])
+        else:
+            flattened = img.convert("RGB")
+
+    target_w, target_h = IMAGE_REQUIRED_DIMENSIONS
+    width, height = flattened.size
+    scale = min(1.0, target_w / width, target_h / height)
+    fitted_size = (
+        min(target_w, max(1, round(width * scale))),
+        min(target_h, max(1, round(height * scale))),
+    )
+
+    canvas = Image.new("RGB", IMAGE_REQUIRED_DIMENSIONS, (0, 0, 0))
+    fitted = (
+        flattened.resize(fitted_size, Image.Resampling.LANCZOS)
+        if fitted_size != flattened.size
+        else flattened
+    )
+    canvas.paste(
+        fitted,
+        ((target_w - fitted_size[0]) // 2, (target_h - fitted_size[1]) // 2),
+    )
+
+    buffer = BytesIO()
+    canvas.save(buffer, format="JPEG", quality=JPEG_SAVE_QUALITY)
+    return buffer.getvalue()
+
+
+@mcp.tool()
+def save_image_in_gallery(data: str, name: str) -> dict[str, str]:
+    """
+    Saves an image into media/images ready for the Cube display.
+
+    The image bytes must be Base64-encoded by the client. After decoding, the
+    image is scaled down preserving its aspect ratio until it fits 240x240,
+    padded with black (on the sides or top/bottom as needed) up to exactly
+    240x240 and re-encoded as JPEG. The result is verified to be a valid
+    240x240 jpg before being stored in the local images pool used by
+    start_random_images; any source format (png, gif, webp, jpg...) is accepted.
+    The final .jpg name (save name plus ".jpg") must be at most 25 characters.
+
+    Args:
+        data: Image bytes encoded in Base64 (client-side).
+        name: Desired save name, usually without suffix; a trailing image
+            suffix (.jpg, .png...) is stripped and ".jpg" is always appended.
+    """
+    requested = name.strip()
+    if not requested:
+        return {"status": "error", "message": "Image name is required."}
+
+    candidate = Path(requested)
+    stem = (
+        candidate.stem
+        if candidate.suffix.lower() in STRIPPABLE_IMAGE_SUFFIXES
+        else candidate.name
+    ).strip().rstrip(".")
+    if not stem or requested.startswith("."):
+        return {"status": "error", "message": "Image name is required."}
+
+    target_name = f"{stem}.jpg"
+    if len(target_name) > IMAGE_NAME_MAX_LENGTH:
+        return {
+            "status": "error",
+            "message": (
+                f"Image name is too long: {target_name} ({len(target_name)} characters). "
+                f"Max is {IMAGE_NAME_MAX_LENGTH} characters."
+            ),
+        }
+
+    try:
+        payload = _decode_image(data)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to decode image {name}: {e}"}
+
+    if not payload:
+        return {"status": "error", "message": f"Image is empty: {name}."}
+
+    try:
+        processed = _fit_image_to_jpg(payload)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to process image {name}: {e}"}
+
+    try:
+        with Image.open(BytesIO(processed)) as check:
+            if check.format != "JPEG":
+                return {
+                    "status": "error",
+                    "message": f"Processed image is not a valid JPEG: {name}.",
+                }
+            if check.size != IMAGE_REQUIRED_DIMENSIONS:
+                width, height = check.size
+                return {
+                    "status": "error",
+                    "message": (
+                        f"Processed image must be {IMAGE_REQUIRED_DIMENSIONS[0]}x{IMAGE_REQUIRED_DIMENSIONS[1]} "
+                        f"(got {width}x{height}): {name}."
+                    ),
+                }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Processed image is not a valid JPEG: {name} ({e}).",
+        }
+
+    target = RANDOM_IMAGE_DIR / target_name
+    try:
+        RANDOM_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(processed)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to save image {target.name}: {e}"}
+
+    return {
+        "status": "success",
+        "message": f"Image saved to {RANDOM_IMAGE_DIR}: {target.name} (240x240 JPEG).",
+    }
+
+
 def _restore_previous_gif(
     previous: str, seconds: int, resume_random: bool = False, resume_image: bool = False
 ) -> None:
@@ -539,7 +698,9 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
     The flow is: read the gif currently displayed (to restore it later), upload
     the new image as tmp.gif/tmp.jpg with the same validations as
     upload_cube_image (Base64 decode, allowed extension, 240x240 dimensions,
-    free space, upload confirmation) and display it. The call returns
+    free space, upload confirmation) and display it. Other formats (png, webp,
+    bmp...) are not rejected: they are converted to an exact 240x240 JPEG and
+    shown as tmp.jpg. The call returns
     immediately; after the configured seconds a background job restores the
     previous gif. Only one temporary gif can run at a time: while one is being
     shown, new requests are rejected until it finishes. If the random gif mode
@@ -550,7 +711,7 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
     Args:
         data: Image bytes encoded in Base64 (client-side).
         filename: Name of the image, used to determine its type (.gif -> tmp.gif,
-            .jpg/.jpeg -> tmp.jpg).
+            anything else -> tmp.jpg).
         seconds: Seconds to show the image (default 5, clamped to [1, 30]).
     """
     global _TEMP_GIF_RUNNING
@@ -569,13 +730,20 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
     clamped = max(TEMP_GIF_MIN_SECONDS, min(TEMP_GIF_MAX_SECONDS, seconds))
 
     name = Path(filename.strip()).name
-    suffix = Path(name).suffix.lower()
-    if suffix not in ALLOWED_UPLOAD_SUFFIXES:
-        return {
-            "status": "error",
-            "message": f"Unsupported file type: {suffix or 'none'}. Allowed: .gif, .jpg, .jpeg.",
-        }
-    tmp_name = f"{TEMP_GIF_NAME}.gif" if suffix == ".gif" else f"{TEMP_GIF_NAME}.jpg"
+
+    try:
+        payload = _decode_image(data)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to decode image {name}: {e}"}
+
+    if not payload:
+        return {"status": "error", "message": f"Image is empty: {name}."}
+
+    name, payload, conversion_error = _to_cube_compatible_image(name, payload)
+    if conversion_error:
+        return {"status": "error", "message": conversion_error}
+
+    tmp_name = f"{TEMP_GIF_NAME}.gif" if name.lower().endswith(".gif") else f"{TEMP_GIF_NAME}.jpg"
 
     was_running_random = _suspend_random_mode()
     was_running_image = _suspend_image_mode()
@@ -589,7 +757,7 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
             _resume_image_mode()
         return {"status": "error", "message": f"Failed to read current gif from Cube: {e}"}
 
-    result = upload_cube_image(data, tmp_name)
+    result = upload_cube_image(base64.b64encode(payload).decode("ascii"), tmp_name)
     if result["status"] != "success":
         if was_running_random:
             _resume_random_mode()

@@ -2,8 +2,16 @@ from __future__ import annotations
 
 from .cube import (
     list_cube_gifs,
+    get_cube_current_gif,
     get_cube_free_space,
     set_cube_gif,
+    get_cube_brightness,
+    set_cube_brightness,
+    turn_cube_display_off,
+    turn_cube_display_on,
+    upload_cube_image,
+    save_image_in_gallery,
+    show_temporary_gif,
     get_random_image_status,
     start_random_images,
     stop_random_images,
@@ -14,8 +22,16 @@ from .cube import (
 
 __all__ = [
     "list_cube_gifs",
+    "get_cube_current_gif",
     "get_cube_free_space",
     "set_cube_gif",
+    "get_cube_brightness",
+    "set_cube_brightness",
+    "turn_cube_display_off",
+    "turn_cube_display_on",
+    "upload_cube_image",
+    "save_image_in_gallery",
+    "show_temporary_gif",
     "get_random_image_status",
     "start_random_images",
     "stop_random_images",
