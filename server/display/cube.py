@@ -40,6 +40,18 @@ CUBE_IMAGE_DIR: Final[str] = "/image"
 ALLOWED_UPLOAD_SUFFIXES: Final[frozenset[str]] = frozenset({".gif", ".jpg", ".jpeg"})
 IMAGE_REQUIRED_DIMENSIONS: Final[tuple[int, int]] = (240, 240)
 
+# Upload tuning: the device writes uploads to flash and can momentarily stop
+# answering while doing so, so posts wait generously for the response (with a
+# short connect phase) and are retried once on transport-level failures such
+# as read timeouts or dropped connections.
+UPLOAD_CONNECT_TIMEOUT_SECONDS: Final[int] = 10
+UPLOAD_TIMEOUT_SECONDS: Final[int] = 120
+UPLOAD_ATTEMPTS: Final[int] = 2
+
+# Minimum number of bytes that must remain free on the Cube after an upload;
+# uploads that would leave less than this reserve are rejected.
+UPLOAD_FREE_SPACE_BUFFER: Final[int] = 50 * 1024
+
 JPEG_SAVE_QUALITY: Final[int] = 90
 
 # Maximum length of the .jpg name stored in media/images by save_image_in_gallery.
@@ -411,11 +423,25 @@ def _upload_cube_image(name: str, data: bytes) -> None:
 
     Mirrors the device's web uploader: gifs are sent in the "image" field while
     jpg/jpeg files are sent in the "file" field, always targeting the /image dir.
+    Transport-level failures (read timeouts, dropped connections) are retried
+    once after a short pause, because the device can stall while writing the
+    previous upload to flash; HTTP error responses are not retried.
     """
     field = "image" if name.lower().endswith(".gif") else "file"
     url = f"{CUBE_BASE_URL}/doUpload?dir={CUBE_IMAGE_DIR}"
-    response = httpx.post(url, files={field: (name, data)}, timeout=60)
-    response.raise_for_status()
+    timeout = httpx.Timeout(UPLOAD_TIMEOUT_SECONDS, connect=UPLOAD_CONNECT_TIMEOUT_SECONDS)
+
+    for attempt in range(1, UPLOAD_ATTEMPTS + 1):
+        try:
+            response = httpx.post(url, files={field: (name, data)}, timeout=timeout)
+            response.raise_for_status()
+            return
+        except httpx.HTTPStatusError:
+            raise
+        except httpx.TransportError:
+            if attempt >= UPLOAD_ATTEMPTS:
+                raise
+            time.sleep(2)
 
 
 def _is_in_cube_filelist(name: str, entries: list[str]) -> bool:
@@ -425,6 +451,28 @@ def _is_in_cube_filelist(name: str, entries: list[str]) -> bool:
         entry.lower() == lowered or entry.lower().endswith(f"/{lowered}")
         for entry in entries
     )
+
+
+def _cube_free_space_rejection(size: int) -> str | None:
+    """Return an error message when the Cube cannot hold `size` bytes.
+
+    The upload must fit in the free space reported by /space.json while
+    keeping the UPLOAD_FREE_SPACE_BUFFER reserve untouched. Returns None
+    when the upload can proceed.
+    """
+    try:
+        free, _total = _fetch_cube_space()
+    except Exception as e:
+        return f"Failed to check free space on Cube: {e}"
+
+    if size + UPLOAD_FREE_SPACE_BUFFER > free:
+        return (
+            f"Not enough space on Cube: file needs {size} bytes plus a "
+            f"{UPLOAD_FREE_SPACE_BUFFER // 1024} KB free reserve, but only "
+            f"{free} bytes ({free / 1024:.1f} KB) are free."
+        )
+
+    return None
 
 
 def _decode_image(data: str) -> bytes:
@@ -499,19 +547,9 @@ def upload_cube_image(data: str, filename: str) -> dict[str, str]:
             ),
         }
 
-    try:
-        free, _total = _fetch_cube_space()
-    except Exception as e:
-        return {"status": "error", "message": f"Failed to check free space on Cube: {e}"}
-
-    if len(payload) > free:
-        return {
-            "status": "error",
-            "message": (
-                f"Not enough space on Cube: file needs {len(payload)} bytes "
-                f"but only {free} bytes are free."
-            ),
-        }
+    rejection = _cube_free_space_rejection(len(payload))
+    if rejection:
+        return {"status": "error", "message": rejection}
 
     try:
         _upload_cube_image(name, payload)
@@ -664,11 +702,11 @@ def save_image_in_gallery(data: str, name: str) -> dict[str, str]:
 
 
 @mcp.tool()
-def show_gallery_image(name: str) -> dict[str, str]:
+def show_gallery_image(filename: str) -> dict[str, str]:
     """
     Shows an image from the media/images gallery on the Cube display.
 
-    Looks up `name` in the local gallery (with or without the .jpg/.jpeg
+    Looks up `filename` in the local gallery (with or without the .jpg/.jpeg
     suffix), uploads it to the Cube under its own name and displays it.
     Unlike show_temporary_gif there is no timer: the image stays on screen
     until another gif or image is set. Images that are not 240x240 JPEGs
@@ -677,12 +715,13 @@ def show_gallery_image(name: str) -> dict[str, str]:
     image stays on screen.
 
     Args:
-        name: Name of the image in the gallery, usually without suffix.
+        filename: Name of the image file in the gallery, usually without
+            suffix.
     """
     if not CUBE_BASE_URL:
         return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
 
-    requested = name.strip().lstrip("/")
+    requested = filename.strip().lstrip("/")
     if not requested:
         return {"status": "error", "message": "Image name is required."}
 
@@ -722,10 +761,17 @@ def show_gallery_image(name: str) -> dict[str, str]:
         except Exception as e:
             return {"status": "error", "message": f"Failed to convert image {path.name}: {e}"}
 
+    rejection = _cube_free_space_rejection(len(payload))
+    if rejection:
+        return {"status": "error", "message": rejection}
+
     try:
         _upload_cube_image(upload_name, payload)
     except Exception as e:
-        return {"status": "error", "message": f"Failed to upload image to Cube: {e}"}
+        return {
+            "status": "error",
+            "message": f"Failed to upload image {upload_name} ({len(payload)} bytes) to Cube: {e}",
+        }
 
     try:
         available = _fetch_cube_gifs()
@@ -753,6 +799,123 @@ def show_gallery_image(name: str) -> dict[str, str]:
         }
 
     parts = [f"Cube image set to: {upload_name} (no timer; it stays until changed)"]
+    if was_running_gif:
+        parts.append("Random gif mode stopped.")
+    if was_running_image:
+        parts.append("Random image mode stopped.")
+    if response:
+        parts.append(f"Device response: {response}")
+
+    return {"status": "success", "message": ". ".join(parts)}
+
+
+@mcp.tool()
+def show_gallery_gif(filename: str) -> dict[str, str]:
+    """
+    Shows a gif from the media/gifs gallery on the Cube display.
+
+    Looks up `filename` in the local gifs gallery (with or without the .gif
+    suffix), uploads it to the Cube as tmp.gif and displays it. Unlike
+    show_temporary_gif there is no timer: the gif stays on screen until
+    another gif or image is set, so nothing is remembered or restored.
+    While a temporary gif is being shown this call is rejected. If a random
+    mode (gifs or images) is running it is stopped first so the requested
+    gif stays on screen.
+
+    Args:
+        filename: Name of the gif file in the gallery, usually without
+            suffix.
+    """
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    requested = filename.strip().lstrip("/")
+    if not requested:
+        return {"status": "error", "message": "Gif name is required."}
+
+    candidate = Path(requested)
+    names = [candidate.name] if candidate.suffix.lower() == ".gif" else [f"{candidate.name}.gif"]
+    path = next(
+        (
+            RANDOM_GIF_DIR / candidate_name
+            for candidate_name in dict.fromkeys(names)
+            if (RANDOM_GIF_DIR / candidate_name).is_file()
+        ),
+        None,
+    )
+    if path is None:
+        available = ", ".join(gif.name for gif in _list_local_gifs()) or "none"
+        return {
+            "status": "error",
+            "message": f"Gif not found in {RANDOM_GIF_DIR}: {requested}. Available: {available}.",
+        }
+
+    with _TEMP_GIF_LOCK:
+        busy = _TEMP_GIF_RUNNING
+    if busy:
+        return {
+            "status": "error",
+            "message": "A temporary gif is already being shown. Wait for it to finish before starting another.",
+        }
+
+    payload = path.read_bytes()
+
+    try:
+        with Image.open(BytesIO(payload)) as img:
+            fmt, size = img.format, img.size
+    except Exception as e:
+        return {"status": "error", "message": f"Not a valid GIF: {path.name} ({e})."}
+
+    if fmt != "GIF":
+        return {"status": "error", "message": f"Not a valid GIF: {path.name}."}
+
+    if size != IMAGE_REQUIRED_DIMENSIONS:
+        return {
+            "status": "error",
+            "message": (
+                f"Gif must be {IMAGE_REQUIRED_DIMENSIONS[0]}x{IMAGE_REQUIRED_DIMENSIONS[1]} "
+                f"(got {size[0]}x{size[1]}): {path.name}."
+            ),
+        }
+
+    rejection = _cube_free_space_rejection(len(payload))
+    if rejection:
+        return {"status": "error", "message": rejection}
+
+    try:
+        _upload_cube_image(f"{TEMP_GIF_NAME}.gif", payload)
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to upload gif {path.name} ({len(payload)} bytes) to Cube: {e}",
+        }
+
+    try:
+        available = _fetch_cube_gifs()
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to verify upload of {TEMP_GIF_NAME}.gif on Cube: {e}"}
+
+    if not _is_in_cube_filelist(f"{TEMP_GIF_NAME}.gif", available):
+        return {
+            "status": "error",
+            "message": f"Upload could not be confirmed: {TEMP_GIF_NAME}.gif is not in the Cube file list.",
+        }
+
+    was_running_gif, _previous_random = _stop_random_mode()
+    was_running_image, _previous_random_image = _stop_image_mode()
+
+    try:
+        response = _set_cube_gif(f"{TEMP_GIF_NAME}.gif")
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to set gif on Cube: {e}"}
+
+    if "FAIL" in response.upper():
+        return {
+            "status": "error",
+            "message": f"Cube refused to set gif {TEMP_GIF_NAME}.gif. Response: {response}",
+        }
+
+    parts = [f"Cube gif set to: {TEMP_GIF_NAME}.gif (from {path.name}; no timer; it stays until changed)"]
     if was_running_gif:
         parts.append("Random gif mode stopped.")
     if was_running_image:

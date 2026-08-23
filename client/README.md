@@ -88,6 +88,10 @@ python -m client.main save-image-in-gallery --file path/to/photo.png --name test
 # (no timer: it stays until another gif or image is set)
 python -m client.main show-gallery-image --file test.jpg
 
+# 📺 Show a gif from the server's media/gifs gallery on the Cube as tmp.gif
+# (no timer: it stays until another gif or image is set)
+python -m client.main show-gallery-gif --file test.gif
+
 # 🖼️ List the images stored in the server's local gallery (media/images)
 python -m client.main list-gallery-images
 
@@ -143,6 +147,7 @@ from client.cube_client import (
     upload_cube_image,
     save_image_in_gallery,
     show_gallery_image,
+    show_gallery_gif,
     show_temporary_gif,
     list_gallery_images,
     list_gallery_gifs,
@@ -266,6 +271,11 @@ async def main():
     # Pass the filename inside media/images, with or without the .jpg/.jpeg
     # extension. There is no timer: the image stays until another is set.
     result = await show_gallery_image("test.jpg")
+    print(f"Show: {result}")
+
+    # 📺 Show a gif from the server's media/gifs gallery on the Cube as
+    # tmp.gif. No timer either: it stays until another gif or image is set.
+    result = await show_gallery_gif("003")
     print(f"Show: {result}")
 
     # 🖼️ List the images stored in the server's local gallery (media/images).

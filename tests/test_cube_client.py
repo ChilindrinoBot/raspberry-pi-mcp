@@ -17,6 +17,7 @@ from client.cube_client import (
     upload_cube_image,
     save_image_in_gallery,
     show_gallery_image,
+    show_gallery_gif,
     show_temporary_gif,
     list_gallery_images,
     list_gallery_gifs,
@@ -751,7 +752,7 @@ class ListGalleryClientTests(unittest.TestCase):
 
 class ShowGalleryImageClientTests(unittest.TestCase):
     @patch("client.cube_client.Client")
-    def test_sends_gallery_image_name(self, MockClient) -> None:
+    def test_sends_gallery_image_filename(self, MockClient) -> None:
         ctx, mock_client = _make_client_mock()
         mock_client.call_tool.return_value = type(
             "Obj", (), {"structured_content": {"status": "success", "message": "Cube image set to: test.jpg"}}
@@ -760,7 +761,7 @@ class ShowGalleryImageClientTests(unittest.TestCase):
 
         result = asyncio.run(show_gallery_image("test"))
 
-        mock_client.call_tool.assert_called_once_with("show_gallery_image", {"name": "test"})
+        mock_client.call_tool.assert_called_once_with("show_gallery_image", {"filename": "test"})
         self.assertEqual(result["status"], "success")
 
     @patch("client.cube_client.Client")
@@ -777,6 +778,38 @@ class ShowGalleryImageClientTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertIn("Image not found", result["message"])
+
+
+class ShowGalleryGifClientTests(unittest.TestCase):
+    @patch("client.cube_client.Client")
+    def test_sends_gallery_gif_filename(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj",
+            (),
+            {"structured_content": {"status": "success", "message": "Cube gif set to: tmp.gif (from anim.gif)"}},
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(show_gallery_gif("anim"))
+
+        mock_client.call_tool.assert_called_once_with("show_gallery_gif", {"filename": "anim"})
+        self.assertEqual(result["status"], "success")
+
+    @patch("client.cube_client.Client")
+    def test_returns_server_error(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj",
+            (),
+            {"structured_content": {"status": "error", "message": "Gif not found in media/gifs: nope. Available: none."}},
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(show_gallery_gif("nope"))
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Gif not found", result["message"])
 
 
 if __name__ == "__main__":

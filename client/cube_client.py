@@ -147,14 +147,27 @@ async def save_image_in_gallery(file_path: str, name: str) -> dict[str, str]:
         return result.structured_content
 
 
-async def show_gallery_image(name: str) -> dict[str, str]:
+async def show_gallery_image(filename: str) -> dict[str, str]:
     """Shows an image from the server's media/images gallery on the Cube.
 
-    The image is uploaded under its own name and displayed without a timer:
+    The image is looked up by filename (with or without the .jpg/.jpeg
+    extension), uploaded under its own name and displayed without a timer:
     it stays on screen until another gif or image is set.
     """
     async with Client(AuthTransport(SERVER_URL)) as client:
-        result = await client.call_tool("show_gallery_image", {"name": name})
+        result = await client.call_tool("show_gallery_image", {"filename": filename})
+        return result.structured_content
+
+
+async def show_gallery_gif(filename: str) -> dict[str, str]:
+    """Shows a gif from the server's media/gifs gallery on the Cube.
+
+    The gif is looked up by filename (with or without the .gif extension),
+    uploaded as tmp.gif and displayed without a timer: it stays on screen
+    until another gif or image is set.
+    """
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool("show_gallery_gif", {"filename": filename})
         return result.structured_content
 
 
