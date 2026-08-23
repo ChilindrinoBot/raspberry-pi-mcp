@@ -83,6 +83,15 @@ python -m client.main upload-cube-gif --file path/to/image.gif
 # ⏱️ Show a gif/jpg image temporarily on the Cube (default 5 s, max 30 s, non-blocking)
 python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
 
+# 🎲 Start cycling random gifs from media/video/gifs as random.gif (default 60 s, max 3600 s)
+python -m client.main start-random-gifs --seconds 60
+
+# 🔍 Get which temporary gif (random.gif) is currently being used on the Cube
+python -m client.main get-current-random-gif
+
+# 🛑 Stop cycling random gifs on the Cube (the last random.gif stays displayed)
+python -m client.main stop-random-gifs
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -110,6 +119,9 @@ from client.cube_client import (
     turn_cube_display_on,
     upload_cube_image,
     show_temporary_gif,
+    get_random_gif_status,
+    start_random_cube_gifs,
+    stop_random_cube_gifs,
 )
 
 async def main():
@@ -217,6 +229,19 @@ async def main():
     # restored automatically in the background. Only one at a time.
     result = await show_temporary_gif("path/to/image.gif", seconds=10)
     print(f"Temporary show: {result}")
+
+    # 🎲 Start cycling random gifs from media/video/gifs as random.gif.
+    # A new random gif is uploaded and displayed every N seconds (default 60).
+    result = await start_random_cube_gifs(seconds=60)
+    print(f"Random gifs started: {result}")
+
+    # 🔍 Get which temporary gif (random.gif) is currently being used.
+    status = await get_random_gif_status()
+    print(f"Random gif status:\n{status}")
+
+    # 🛑 Stop cycling random gifs (the last random.gif stays displayed).
+    result = await stop_random_cube_gifs()
+    print(f"Random gifs stopped: {result}")
 
     # Later, stop the playback
     await stop_audio()

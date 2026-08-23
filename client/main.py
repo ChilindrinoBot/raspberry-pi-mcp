@@ -23,6 +23,9 @@ from .cube_client import (
     turn_cube_display_on,
     upload_cube_image,
     show_temporary_gif,
+    get_random_gif_status,
+    start_random_cube_gifs,
+    stop_random_cube_gifs,
 )
 
 
@@ -172,6 +175,26 @@ async def run_cli():
         help="Seconds to show the image before restoring the previous gif (default 5, max 30)",
     )
 
+    # Command 'start-random-gifs'
+    random_gif_parser = subparsers.add_parser(
+        "start-random-gifs",
+        help="Cycle random gifs from media/video/gifs on the Cube as random.gif",
+    )
+    random_gif_parser.add_argument(
+        "--seconds",
+        type=int,
+        default=60,
+        help="Seconds each gif is shown before switching to another random gif (default 60)",
+    )
+
+    # Command 'stop-random-gifs'
+    subparsers.add_parser("stop-random-gifs", help="Stop cycling random gifs on the Cube")
+
+    # Command 'get-current-random-gif'
+    subparsers.add_parser(
+        "get-current-random-gif", help="Get which temporary gif (random.gif) is being used"
+    )
+
     args = parser.parse_args()
 
     try:
@@ -283,6 +306,18 @@ async def run_cli():
             print(f"Showing {args.file} on the Cube for {args.seconds}s...")
             res = await show_temporary_gif(args.file, args.seconds)
             print(f"Server Response: {res}")
+        elif args.command == "start-random-gifs":
+            print(f"Cycling random gifs every {args.seconds}s...")
+            res = await start_random_cube_gifs(args.seconds)
+            print(f"Server Response: {res}")
+        elif args.command == "stop-random-gifs":
+            print("Stopping random gif cycling...")
+            res = await stop_random_cube_gifs()
+            print(f"Server Response: {res}")
+        elif args.command == "get-current-random-gif":
+            print("Fetching current random gif status...")
+            res = await get_random_gif_status()
+            print(f"\n{res}")
         else:
             parser.print_help()
     except BaseException as e:

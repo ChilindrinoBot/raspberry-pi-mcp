@@ -120,3 +120,32 @@ async def show_temporary_gif(file_path: str, seconds: int = 5) -> dict[str, str]
             {"data": encoded, "filename": path.name, "seconds": seconds},
         )
         return result.structured_content
+
+
+async def get_random_gif_status() -> str:
+    """Fetches the random gif mode status (running, current gif) from the server resource."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.read_resource("cube://random-gif")
+
+        if not result.contents:
+            return "No random gif information available for the Cube."
+
+        return result.contents[0].text
+
+
+async def start_random_cube_gifs(seconds: int = 60) -> dict[str, str]:
+    """Requests the server to start cycling random gifs as random.gif on the Cube.
+
+    A new random gif from media/video/gifs is uploaded and displayed every
+    `seconds` (default 60 = 1 minute) until stop is requested.
+    """
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool("start_random_gifs", {"seconds": seconds})
+        return result.structured_content
+
+
+async def stop_random_cube_gifs() -> dict[str, str]:
+    """Requests the server to stop cycling random gifs on the Cube."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool("stop_random_gifs", {})
+        return result.structured_content

@@ -844,7 +844,9 @@ class ShowTemporaryGifTests(unittest.TestCase):
         mock_upload.assert_called_once_with(self._encoded(b"gifdata"), "tmp.gif")
         mock_set.assert_called_once_with("tmp.gif")
         mock_thread_cls.assert_called_once_with(
-            target=cube_module._restore_previous_gif, args=("test.gif", 5), daemon=True
+            target=cube_module._restore_previous_gif,
+            args=("test.gif", 5, False),
+            daemon=True,
         )
         mock_thread_cls.return_value.start.assert_called_once()
         self.assertTrue(cube_module._TEMP_GIF_RUNNING)
@@ -861,7 +863,9 @@ class ShowTemporaryGifTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         mock_upload.assert_called_once_with(self._encoded(b"jpgdata"), "tmp.jpg")
         mock_thread_cls.assert_called_once_with(
-            target=cube_module._restore_previous_gif, args=("photo.jpg", 5), daemon=True
+            target=cube_module._restore_previous_gif,
+            args=("photo.jpg", 5, False),
+            daemon=True,
         )
 
     @patch("server.display.cube.threading.Thread")
@@ -876,7 +880,9 @@ class ShowTemporaryGifTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertIn("displayed for 30 seconds", result["message"])
         mock_thread_cls.assert_called_once_with(
-            target=cube_module._restore_previous_gif, args=("test.gif", 30), daemon=True
+            target=cube_module._restore_previous_gif,
+            args=("test.gif", 30, False),
+            daemon=True,
         )
 
     @patch("server.display.cube.threading.Thread")
@@ -891,7 +897,9 @@ class ShowTemporaryGifTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertIn("displayed for 1 seconds", result["message"])
         mock_thread_cls.assert_called_once_with(
-            target=cube_module._restore_previous_gif, args=("test.gif", 1), daemon=True
+            target=cube_module._restore_previous_gif,
+            args=("test.gif", 1, False),
+            daemon=True,
         )
 
     @patch("server.display.cube.threading.Thread")
@@ -907,7 +915,9 @@ class ShowTemporaryGifTests(unittest.TestCase):
         self.assertIn("No previous gif to restore", result["message"])
         mock_set.assert_called_once_with("tmp.gif")
         mock_thread_cls.assert_called_once_with(
-            target=cube_module._restore_previous_gif, args=("", 5), daemon=True
+            target=cube_module._restore_previous_gif,
+            args=("", 5, False),
+            daemon=True,
         )
 
     @patch("server.display.cube.threading.Thread")
@@ -1051,6 +1061,167 @@ class RestorePreviousGifTests(unittest.TestCase):
         _restore_previous_gif("test.gif", 2)
 
         self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+
+
+class RandomModeInteractionFixture(unittest.TestCase):
+    def setUp(self) -> None:
+        self._originals = (
+            cube_module._RANDOM_MODE_RUNNING,
+            cube_module._RANDOM_CURRENT_GIF,
+            cube_module._TEMP_GIF_RUNNING,
+        )
+        cube_module._RANDOM_MODE_RUNNING = False
+        cube_module._RANDOM_CURRENT_GIF = None
+        cube_module._TEMP_GIF_RUNNING = False
+
+    def tearDown(self) -> None:
+        (
+            cube_module._RANDOM_MODE_RUNNING,
+            cube_module._RANDOM_CURRENT_GIF,
+            cube_module._TEMP_GIF_RUNNING,
+        ) = self._originals
+
+
+class SetCubeGifStopsRandomModeTests(RandomModeInteractionFixture):
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube._fetch_cube_gifs", return_value=["gif1.gif"])
+    def test_stops_running_random_mode_and_reports_it(
+        self, mock_gifs: Mock, mock_set: Mock
+    ) -> None:
+        cube_module._RANDOM_MODE_RUNNING = True
+        cube_module._RANDOM_CURRENT_GIF = "gifx.gif"
+
+        result = set_cube_gif("gif1.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Random gif mode stopped.", result["message"])
+        self.assertFalse(cube_module._RANDOM_MODE_RUNNING)
+        mock_set.assert_called_once_with("gif1.gif")
+
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube._fetch_cube_gifs", return_value=["gif1.gif"])
+    def test_keeps_message_unchanged_when_random_not_running(
+        self, mock_gifs: Mock, mock_set: Mock
+    ) -> None:
+        result = set_cube_gif("gif1.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertNotIn("Random gif mode stopped", result["message"])
+
+    @patch("server.display.cube._set_cube_gif")
+    @patch("server.display.cube._fetch_cube_gifs", return_value=["gif1.gif"])
+    def test_does_not_stop_random_mode_when_validation_fails(
+        self, mock_gifs: Mock, mock_set: Mock
+    ) -> None:
+        cube_module._RANDOM_MODE_RUNNING = True
+
+        result = set_cube_gif("unknown.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertTrue(cube_module._RANDOM_MODE_RUNNING)
+        mock_set.assert_not_called()
+
+
+class ShowTemporaryGifSuspendsRandomModeTests(RandomModeInteractionFixture):
+    def _encoded(self, data: bytes) -> str:
+        return base64.b64encode(data).decode()
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/random.gif")
+    def test_suspends_running_random_mode_before_showing_tmp(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        cube_module._RANDOM_MODE_RUNNING = True
+        cube_module._RANDOM_CURRENT_GIF = "gifx.gif"
+
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Random gif mode paused (it will resume automatically).", result["message"])
+        self.assertTrue(cube_module._RANDOM_MODE_RUNNING)
+        self.assertTrue(cube_module._RANDOM_MODE_SUSPENDED)
+        # The previous gif read after suspending is the random.gif upload and
+        # the restore job will resume the random mode afterwards.
+        mock_thread_cls.assert_called_once_with(
+            target=cube_module._restore_previous_gif,
+            args=("random.gif", 5, True),
+            daemon=True,
+        )
+
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    def test_no_paused_note_when_random_not_running(
+        self, mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertNotIn("Random gif mode paused", result["message"])
+        self.assertFalse(cube_module._RANDOM_MODE_SUSPENDED)
+
+    @patch("server.display.cube.upload_cube_image")
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/random.gif")
+    def test_resumes_random_mode_when_upload_fails(
+        self, mock_current: Mock, mock_upload: Mock
+    ) -> None:
+        cube_module._RANDOM_MODE_RUNNING = True
+        cube_module._suspend_random_mode()
+        mock_upload.return_value = {"status": "error", "message": "boom"}
+
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertTrue(cube_module._RANDOM_MODE_RUNNING)
+        self.assertFalse(cube_module._RANDOM_MODE_SUSPENDED)
+
+    @patch(
+        "server.display.cube._fetch_cube_current_gif",
+        side_effect=RuntimeError("timeout"),
+    )
+    def test_resumes_random_mode_when_current_gif_read_fails(self, mock_current: Mock) -> None:
+        cube_module._RANDOM_MODE_RUNNING = True
+        cube_module._suspend_random_mode()
+
+        result = show_temporary_gif(self._encoded(b"gifdata"), "tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertFalse(cube_module._RANDOM_MODE_SUSPENDED)
+
+
+class RestorePreviousGifResumesRandomTests(RandomModeInteractionFixture):
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.time.sleep")
+    def test_resume_random_true_clears_suspension_after_restore(
+        self, mock_sleep: Mock, mock_set: Mock
+    ) -> None:
+        cube_module._TEMP_GIF_RUNNING = True
+        cube_module._RANDOM_MODE_RUNNING = True
+        cube_module._suspend_random_mode()
+
+        cube_module._restore_previous_gif("random.gif", 3, resume_random=True)
+
+        mock_sleep.assert_called_once_with(3)
+        mock_set.assert_called_once_with("random.gif")
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+        self.assertFalse(cube_module._RANDOM_MODE_SUSPENDED)
+        self.assertTrue(cube_module._RANDOM_MODE_RUNNING)
+
+    @patch("server.display.cube._set_cube_gif")
+    @patch("server.display.cube.time.sleep")
+    def test_resume_random_false_leaves_state_alone(
+        self, mock_sleep: Mock, mock_set: Mock
+    ) -> None:
+        cube_module._TEMP_GIF_RUNNING = True
+
+        cube_module._restore_previous_gif("test.gif", 2)
+
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+        self.assertFalse(cube_module._RANDOM_MODE_SUSPENDED)
+        self.assertFalse(cube_module._RANDOM_MODE_RUNNING)
 
 
 if __name__ == "__main__":

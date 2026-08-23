@@ -17,6 +17,7 @@ The **Audio & Camera Server** is an MCP-compliant server that provides low-level
 - **Cube Display Power**: Turn the display off (brightness 0) remembering the previous level in memory, and turn it back on restoring that level (default 50 if nothing is remembered). The memory is in-process and resets when the server restarts.
 - **Cube Image Upload**: Receive gif/jpg images Base64-encoded from the client (no server-side filesystem path involved), validate them (.gif/.jpg/.jpeg, exactly 240x240, checked with Pillow) and upload them to the Cube's `/image` directory via `/doUpload`. The upload is confirmed by checking the file appears in the Cube's file list before reporting success.
 - **Cube Temporary Gif**: Show a gif/jpg momentarily: remembers the current gif, uploads the new image as `tmp.gif`/`tmp.jpg` with full validations and displays it. The call is non-blocking — a background job restores the previous gif after the configured time (default 5 s, max 30 s). While a temporary gif is being shown, new temporary shows are rejected until it finishes (in-process flag, like audio process control).
+- **Cube Random Gif Mode**: Cycle random gifs from `media/video/gifs` on the Cube display. `start_random_gifs` uploads a random gif as `random.gif` and displays it, then swaps it for another random gif every N seconds (default 60 s, clamped to 5–3600) in an endless loop. The mode pauses automatically while the Cube display is off (or unreachable) and resumes when it is back on, and is suspended while a temporary gif is shown and resumed afterwards. `set_cube_gif` stops the mode entirely, while `show_temporary_gif` only suspends it. `stop_random_gifs` ends the loop. The current gif is tracked in-process and reset when the server restarts.
 - **System Awareness**: Detects if `ffplay` is already running to prevent overlapping audio.
 - **Async Execution**: Audio is played in the background to keep the server responsive.
 
@@ -42,7 +43,9 @@ The server exposes the following MCP tools:
 | `turn_cube_display_off` | Turns off the Cube display (brightness 0) remembering the previous level in memory | None |
 | `turn_cube_display_on` | Turns on the Cube display restoring the remembered brightness (default 50 if none) | None |
 | `upload_cube_image` | Decodes a Base64-encoded image sent by the client, validates it (.gif/.jpg/.jpeg, 240x240, free space) and uploads it to the Cube's /image dir via `/doUpload` | `data` (str), `filename` (str) |
-| `show_temporary_gif` | Shows a Base64-encoded gif/jpg temporarily and returns immediately: uploads it as tmp.gif/tmp.jpg, displays it for N seconds (default 5, clamped to 1–30) and restores the previous gif in a background job. One temporary gif at a time | `data` (str), `filename` (str), `seconds` (int, optional) |
+| `show_temporary_gif` | Shows a Base64-encoded gif/jpg temporarily and returns immediately: uploads it as tmp.gif/tmp.jpg, displays it for N seconds (default 5, clamped to 1–30) and restores the previous gif in a background job. One temporary gif at a time. If the random gif mode is running it is suspended during the show and resumed afterwards | `data` (str), `filename` (str), `seconds` (int, optional) |
+| `start_random_gifs` | Starts cycling random gifs from `media/video/gifs` on the Cube: uploads one as `random.gif` and displays it, then swaps it for another random gif every N seconds (default 60, clamped to 5–3600). The loop pauses while the Cube display is off and suspends while a temporary gif is shown. Consecutive repeats are avoided when possible | `seconds` (int, optional) |
+| `stop_random_gifs` | Stops the random gif cycling started by `start_random_gifs`. The last `random.gif` stays displayed | None |
 | `take_photo` | Captures a photo from the Raspberry Pi camera and returns it Base64-encoded | None |
 | `record_video` | Records a video clip and returns it Base64-encoded (clamped to 1–30 s, 1–30 fps) | `duration_seconds` (int), `fps` (int) |
 
@@ -59,6 +62,7 @@ The server exposes the following MCP resources:
 - `cube://images`: Returns a text list of the images currently available on the Cube display.
 - `cube://free-space`: Returns the free storage space on the Cube display in KB, e.g. `Free space on Cube: 903 KB (total: 3048 KB)`.
 - `cube://brightness`: Returns the current brightness level of the Cube display (0-100) as text, e.g. `Current Cube brightness: 10`.
+- `cube://random-gif`: Returns the state of the random gif mode as text, e.g. `Random gif mode: running` with the current temporary gif being used (`Current temporary gif: gifz.gif (uploaded as random.gif)`). It also reports `running (paused: Cube display is off)` or `running (suspended: temporary gif being shown)` while the loop is held, and `stopped` otherwise.
 
 ## ⚙️ Installation
 
