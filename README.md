@@ -5,7 +5,7 @@ A distributed audio management system based on the **Model Context Protocol (MCP
 
 ## 🏗️ Architecture
 The system is split into two main components:
-- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, capture photos/videos from the camera, list the images available on the Cube display, save images into the local media/images pool (resized/padded to 240x240 JPEG), list the contents of the local galleries (images and gifs), and cycle random images and random gifs on the Cube display.
+- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, capture photos/videos from the camera, list the images available on the Cube display, save images into the local media/images pool (resized/padded to 240x240 JPEG), show gallery images on the Cube permanently, list the contents of the local galleries (images and gifs), and cycle random images and random gifs on the Cube display.
 - **`client/`**: A reference Python client that demonstrates how to send audio files and control commands to the server.
 
 ## 🚀 Quick Start
@@ -94,6 +94,9 @@ python -m client.main upload-cube-gif --file path/to/image.gif
 # 💾 Save any image in the server's media/images pool, resized/padded to exactly 240x240 JPEG (--name usually has no suffix;  max 25 chars)
 python -m client.main save-image-in-gallery --file path/to/photo.png --name test
 
+# 📺 Show an image already stored in the server's gallery on the Cube (no timer, it stays until changed)
+python -m client.main show-gallery-image --file test.jpg
+
 # 🖼️ List the images stored in the server's local gallery (media/images)
 python -m client.main list-gallery-images
 
@@ -158,6 +161,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube current gif (/img.json), gif list, free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, local image saving (media/images, 240x240 JPEG with black padding), gallery listing (gallery://images, gallery://gifs), random image cycling (media/images -> random.jpg) and random gif cycling tools
+│       └── cube.py     # Cube current gif (/img.json), gif list, free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, local image saving (media/images, 240x240 JPEG with black padding), permanent gallery image show, gallery listing (gallery://images, gallery://gifs), random image cycling (media/images -> random.jpg) and random gif cycling tools
 └── tests/              # Integration tests
 ```

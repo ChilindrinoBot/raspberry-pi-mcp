@@ -147,6 +147,17 @@ async def save_image_in_gallery(file_path: str, name: str) -> dict[str, str]:
         return result.structured_content
 
 
+async def show_gallery_image(name: str) -> dict[str, str]:
+    """Shows an image from the server's media/images gallery on the Cube.
+
+    The image is uploaded under its own name and displayed without a timer:
+    it stays on screen until another gif or image is set.
+    """
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool("show_gallery_image", {"name": name})
+        return result.structured_content
+
+
 async def get_random_gif_status() -> str:
     """Fetches the random gif mode status (running, current gif) from the server resource."""
     async with Client(AuthTransport(SERVER_URL)) as client:

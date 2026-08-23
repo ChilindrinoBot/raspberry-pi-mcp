@@ -23,6 +23,7 @@ from .cube_client import (
     turn_cube_display_on,
     upload_cube_image,
     save_image_in_gallery,
+    show_gallery_image,
     show_temporary_gif,
     get_random_gif_status,
     start_random_cube_gifs,
@@ -197,6 +198,17 @@ async def run_cli():
         help="Save name (usually without suffix; .jpg is added automatically, max 25 chars)",
     )
 
+    # Command 'show-gallery-image'
+    gallery_show_parser = subparsers.add_parser(
+        "show-gallery-image",
+        help="Show an image from media/images on the Cube (no timer, it stays until changed)",
+    )
+    gallery_show_parser.add_argument(
+        "--file",
+        required=True,
+        help="Filename of the image inside media/images (e.g. photo.jpg; the .jpg/.jpeg extension is optional)",
+    )
+
     # Command 'list-gallery-images'
     subparsers.add_parser(
         "list-gallery-images",
@@ -363,6 +375,10 @@ async def run_cli():
         elif args.command == "save-image-in-gallery":
             print(f"Saving {args.file} as {args.name}.jpg (240x240 JPEG)...")
             res = await save_image_in_gallery(args.file, args.name)
+            print(f"Server Response: {res}")
+        elif args.command == "show-gallery-image":
+            print(f"Showing gallery image {args.file} on the Cube...")
+            res = await show_gallery_image(args.file)
             print(f"Server Response: {res}")
         elif args.command == "start-random-gifs":
             print(f"Cycling random gifs every {args.seconds}s...")

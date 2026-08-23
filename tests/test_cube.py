@@ -30,6 +30,7 @@ from server.display.cube import (
     upload_cube_image,
     _fit_image_to_jpg,
     save_image_in_gallery,
+    show_gallery_image,
     show_temporary_gif,
     list_gallery_images,
     list_gallery_gifs,
@@ -1134,6 +1135,156 @@ class GalleryResourcesTests(unittest.TestCase):
         result = list_gallery_gifs()
 
         self.assertTrue(result.startswith("No gifs found in"))
+
+
+class ShowGalleryImageTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = Path(tempfile.mkdtemp())
+        patcher = patch.object(cube_module, "RANDOM_IMAGE_DIR", self._tmpdir)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def tearDown(self) -> None:
+        import shutil
+
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def _write_jpeg(self, name: str, width: int = 240, height: int = 240) -> Path:
+        path = self._tmpdir / name
+        path.write_bytes(_image_bytes("JPEG", width, height))
+        return path
+
+    def test_requires_a_name(self) -> None:
+        for empty in ("", "   "):
+            result = show_gallery_image(empty)
+
+            self.assertEqual(result["status"], "error")
+            self.assertIn("Image name is required", result["message"])
+
+    def test_reports_missing_image_with_available_list(self) -> None:
+        self._write_jpeg("known.jpg")
+
+        result = show_gallery_image("unknown")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Image not found in", result["message"])
+        self.assertIn("Available: known.jpg", result["message"])
+
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube._stop_image_mode", return_value=(False, None))
+    @patch("server.display.cube._stop_random_mode", return_value=(False, None))
+    @patch("server.display.cube._fetch_cube_gifs")
+    @patch("server.display.cube._upload_cube_image")
+    def test_shows_240_jpeg_as_is(
+        self,
+        mock_upload: Mock,
+        mock_gifs: Mock,
+        mock_stop_random: Mock,
+        mock_stop_image: Mock,
+        mock_set: Mock,
+    ) -> None:
+        self._write_jpeg("photo.jpg")
+        mock_gifs.return_value = ["photo.jpg"]
+
+        result = show_gallery_image("photo")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Cube image set to: photo.jpg", result["message"])
+        self.assertIn("(no timer; it stays until changed)", result["message"])
+        upload_name, payload = mock_upload.call_args.args
+        self.assertEqual(upload_name, "photo.jpg")
+        with Image.open(BytesIO(payload)) as img:
+            self.assertEqual(img.format, "JPEG")
+            self.assertEqual(img.size, (240, 240))
+        mock_set.assert_called_once_with("photo.jpg")
+
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube._stop_image_mode", return_value=(False, None))
+    @patch("server.display.cube._stop_random_mode", return_value=(False, None))
+    @patch("server.display.cube._fetch_cube_gifs")
+    @patch("server.display.cube._upload_cube_image")
+    def test_converts_non_240_image_before_upload(
+        self,
+        mock_upload: Mock,
+        mock_gifs: Mock,
+        mock_stop_random: Mock,
+        mock_stop_image: Mock,
+        mock_set: Mock,
+    ) -> None:
+        (self._tmpdir / "pic.png").write_bytes(_image_bytes("PNG", 500, 300))
+        mock_gifs.return_value = ["pic.jpg"]
+
+        result = show_gallery_image("pic.png")
+
+        self.assertEqual(result["status"], "success")
+        upload_name, payload = mock_upload.call_args.args
+        self.assertEqual(upload_name, "pic.jpg")
+        with Image.open(BytesIO(payload)) as img:
+            self.assertEqual(img.size, (240, 240))
+        mock_set.assert_called_once_with("pic.jpg")
+
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube._stop_image_mode", return_value=(False, None))
+    @patch("server.display.cube._stop_random_mode", return_value=(False, None))
+    @patch("server.display.cube._fetch_cube_gifs")
+    @patch("server.display.cube._upload_cube_image")
+    def test_stops_running_random_modes(
+        self,
+        mock_upload: Mock,
+        mock_gifs: Mock,
+        mock_stop_random: Mock,
+        mock_stop_image: Mock,
+        mock_set: Mock,
+    ) -> None:
+        self._write_jpeg("photo.jpg")
+        mock_gifs.return_value = ["photo.jpg"]
+        mock_stop_random.return_value = (True, "old.gif")
+        mock_stop_image.return_value = (True, "old.jpg")
+
+        result = show_gallery_image("photo.jpg")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Random gif mode stopped", result["message"])
+        self.assertIn("Random image mode stopped", result["message"])
+
+    @patch("server.display.cube._stop_image_mode", return_value=(False, None))
+    @patch("server.display.cube._stop_random_mode", return_value=(False, None))
+    @patch("server.display.cube._fetch_cube_gifs", return_value=[])
+    @patch("server.display.cube._upload_cube_image")
+    def test_fails_when_upload_not_confirmed(
+        self,
+        mock_upload: Mock,
+        mock_gifs: Mock,
+        mock_stop_random: Mock,
+        mock_stop_image: Mock,
+    ) -> None:
+        self._write_jpeg("photo.jpg")
+
+        result = show_gallery_image("photo")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Upload could not be confirmed", result["message"])
+
+    @patch("server.display.cube._set_cube_gif", return_value="FAIL busy")
+    @patch("server.display.cube._stop_image_mode", return_value=(False, None))
+    @patch("server.display.cube._stop_random_mode", return_value=(False, None))
+    @patch("server.display.cube._fetch_cube_gifs")
+    @patch("server.display.cube._upload_cube_image")
+    def test_fails_when_cube_refuses(
+        self,
+        mock_upload: Mock,
+        mock_gifs: Mock,
+        mock_stop_random: Mock,
+        mock_stop_image: Mock,
+        mock_set: Mock,
+    ) -> None:
+        self._write_jpeg("photo.jpg")
+        mock_gifs.return_value = ["photo.jpg"]
+
+        result = show_gallery_image("photo")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Cube refused to set image photo.jpg", result["message"])
 
 
 class ShowTemporaryGifTests(unittest.TestCase):

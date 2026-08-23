@@ -84,6 +84,10 @@ python -m client.main upload-cube-gif --file path/to/image.gif
 # (--name usually has no suffix; .jpg is appended automatically, max 25 chars including it)
 python -m client.main save-image-in-gallery --file path/to/photo.png --name test
 
+# 📺 Show an image already stored in the server's gallery on the Cube
+# (no timer: it stays until another gif or image is set)
+python -m client.main show-gallery-image --file test.jpg
+
 # 🖼️ List the images stored in the server's local gallery (media/images)
 python -m client.main list-gallery-images
 
@@ -138,6 +142,7 @@ from client.cube_client import (
     turn_cube_display_on,
     upload_cube_image,
     save_image_in_gallery,
+    show_gallery_image,
     show_temporary_gif,
     list_gallery_images,
     list_gallery_gifs,
@@ -256,6 +261,12 @@ async def main():
     # max 25 characters including the suffix).
     result = await save_image_in_gallery("path/to/photo.png", "test")
     print(f"Save: {result}")
+
+    # 📺 Show an image already stored in the server's gallery on the Cube.
+    # Pass the filename inside media/images, with or without the .jpg/.jpeg
+    # extension. There is no timer: the image stays until another is set.
+    result = await show_gallery_image("test.jpg")
+    print(f"Show: {result}")
 
     # 🖼️ List the images stored in the server's local gallery (media/images).
     listing = await list_gallery_images()
