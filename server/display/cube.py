@@ -140,6 +140,21 @@ def _fetch_cube_gifs() -> list[str]:
     return [name for name, _size_kb in _fetch_cube_files()]
 
 
+def _delete_cube_file(name: str) -> None:
+    """Request the Cube's /delete endpoint to remove a file from its memory.
+
+    Files live under /image on the device, so the canonical /image/<name> path
+    is always used regardless of how the file list renders the name. Only the
+    HTTP transport status raises; the response body is ignored because the
+    firmware replies inconsistently (e.g. "OK" for no-ops, "Fail" on success).
+    """
+    clean = name.strip().lstrip("/")
+    if not clean.startswith("image/"):
+        clean = f"image/{clean}"
+    url = f"{CUBE_BASE_URL}/delete?file={urllib.parse.quote('/' + clean, safe='')}"
+    urllib.request.urlopen(url).read()
+
+
 @mcp.resource("cube://contents")
 def list_cube_contents() -> str:
     """
@@ -159,6 +174,56 @@ def list_cube_contents() -> str:
 
     lines = [f"{name} ({size_kb} KB)" for name, size_kb in files]
     return "Available Cube files:\n" + "\n".join(lines)
+
+
+@mcp.tool()
+def delete_cube_file(filename: str) -> dict[str, str]:
+    """
+    Deletes a file stored in the Cube's memory (not the local gallery).
+
+    Looks the file up by name in the Cube's file list, requests the deletion
+    via the Cube's /delete endpoint and confirms the file is gone from the
+    file list before reporting success.
+    """
+    if not CUBE_BASE_URL:
+        return {
+            "status": "error",
+            "message": "CUBE_BASE_URL is not configured. Set it in the .env file.",
+        }
+
+    key = filename.strip().lstrip("/")
+    try:
+        files = _fetch_cube_files()
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to fetch contents from Cube: {e}"}
+
+    matches = [name for name, _size_kb in files if name.lower() == key.lower()]
+    if not matches:
+        return {"status": "error", "message": f"{filename} was not found on the Cube."}
+    target = matches[0]
+
+    try:
+        _delete_cube_file(target)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to delete {target} from Cube: {e}"}
+
+    # The device updates its file index lazily, so give it a few chances
+    # before reporting the deletion as unconfirmed.
+    for _attempt in range(3):
+        try:
+            remaining = _fetch_cube_files()
+        except Exception as e:
+            return {"status": "error", "message": f"Failed to verify deletion of {target} on Cube: {e}"}
+
+        if not any(name.lower() == target.lower() for name, _size_kb in remaining):
+            return {"status": "success", "message": f"Deleted {target} from Cube."}
+
+        time.sleep(1)
+
+    return {
+        "status": "error",
+        "message": f"Deletion of {target} could not be confirmed: the Cube still lists it.",
+    }
 
 
 def _fetch_cube_space() -> tuple[int, int]:

@@ -12,6 +12,7 @@ The **Audio & Camera Server** is an MCP-compliant server that provides low-level
 - **Video Recording**: Record short video clips from the Raspberry Pi camera and return them Base64-encoded. Duration (1–30 s) and framerate (1–30 fps) are controllable; a low framerate keeps the payload small.
 - **Cube Current Gif**: Report the gif currently displayed on the Cube via its `/img.json` endpoint.
 - **Cube Display Listing**: List the files (gifs and images) stored on the Cube display — with their sizes in KB — via HTTP.
+- **Cube File Deletion**: Delete a file stored in the Cube's memory (not the local gallery) via its `/delete?file=` endpoint. The canonical `/image/<name>` path is always sent, and success is only reported after re-checking the Cube's file list (up to 3 attempts, 1 s apart), because the firmware updates its index lazily and its responses are unreliable ("OK" for no-ops, "Fail" even when the delete succeeds).
 - **Cube Storage Reporting**: Report the free and total storage space on the Cube display.
 - **Cube Brightness Control**: Set the Cube display brightness (0–100, default 50) via its `/set?brt=` endpoint and query the current level via `/brt.json`.
 - **Cube Display Power**: Turn the display off (brightness 0) remembering the previous level in memory, and turn it back on restoring that level (default 50 if nothing is remembered). The memory is in-process and resets when the server restarts.
@@ -45,6 +46,7 @@ The server exposes the following MCP tools:
 | `set_mic_volume` | Sets the microphone volume to a level between 0 and 100 | `level` (int) |
 | `set_cube_gif` | Displays an image on the Cube (URL `/set?img=/image/<name>`) after validating the image exists in the Cube's file list; stops any running random mode (gifs or images) so the requested gif stays on screen | `gif` (str) |
 | `set_cube_brightness` | Sets the Cube display brightness via URL `/set?brt=<level>` (clamped to 0–100, default 50) | `level` (int, optional) |
+| `delete_cube_file` | Deletes a file from the Cube's memory via `/delete?file=/image/<name>` after confirming it exists in the Cube's file list; verifies it is gone from the list (up to 3 checks, 1 s apart) before reporting success | `filename` (str) |
 | `turn_cube_display_off` | Turns off the Cube display (brightness 0) remembering the previous level in memory | None |
 | `turn_cube_display_on` | Turns on the Cube display restoring the remembered brightness (default 50 if none) | None |
 | `upload_cube_image` | Decodes a Base64-encoded image sent by the client, validates it (.gif/.jpg/.jpeg, 240x240; other formats are converted to 240x240 JPEG), checks free space (keeping a 50 KB reserve) and uploads it to the Cube's /image dir via `/doUpload` | `data` (str), `filename` (str) |

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .cube import (
+    delete_cube_file,
     list_cube_contents,
     get_cube_current_gif,
     get_cube_free_space,
@@ -25,6 +26,7 @@ from .cube import (
 )
 
 __all__ = [
+    "delete_cube_file",
     "list_cube_contents",
     "get_cube_current_gif",
     "get_cube_free_space",

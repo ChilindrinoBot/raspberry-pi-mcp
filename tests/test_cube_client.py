@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 from client.cube_client import (
     get_cube_current_gif,
     list_cube_contents,
+    delete_cube_file,
     get_cube_free_space,
     set_cube_gif,
     set_cube_brightness,
@@ -283,6 +284,37 @@ class GetCubeCurrentGifClientTests(unittest.TestCase):
         result = asyncio.run(get_cube_current_gif())
 
         self.assertEqual(result, "No current gif information available for the Cube.")
+
+
+class DeleteCubeFileClientTests(unittest.TestCase):
+    @patch("client.cube_client.Client")
+    def test_connects_to_http_server(self, MockClient) -> None:
+        """delete_cube_file must connect to the configured HTTP URL."""
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Deleted tmp.gif from Cube."}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(delete_cube_file("tmp.gif"))
+
+        MockClient.assert_called_once()
+
+    @patch("client.cube_client.Client")
+    def test_calls_delete_cube_file_tool_with_filename(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Deleted tmp.gif from Cube."}}
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(delete_cube_file("tmp.gif"))
+
+        mock_client.call_tool.assert_called_once_with(
+            "delete_cube_file", {"filename": "tmp.gif"}
+        )
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Deleted tmp.gif", result["message"])
 
 
 class SetCubeBrightnessClientTests(unittest.TestCase):

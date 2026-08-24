@@ -15,6 +15,7 @@ from .video_client import save_video
 from .cube_client import (
     get_cube_current_gif,
     list_cube_contents,
+    delete_cube_file,
     get_cube_free_space,
     set_cube_gif,
     set_cube_brightness,
@@ -137,6 +138,14 @@ async def run_cli():
     # Command 'list-cube-contents'
     subparsers.add_parser(
         "list-cube-contents", help="List the files (gifs and images) stored on the Cube"
+    )
+
+    # Command 'delete-cube-file'
+    cube_delete_parser = subparsers.add_parser(
+        "delete-cube-file", help="Delete a file from the Cube's memory"
+    )
+    cube_delete_parser.add_argument(
+        "--file", required=True, help="Filename stored on the Cube (e.g. tmp.gif)"
     )
 
     # Command 'get-cube-free-space'
@@ -354,6 +363,10 @@ async def run_cli():
             print("Fetching files stored on the Cube...")
             res = await list_cube_contents()
             print(f"\n{res}")
+        elif args.command == "delete-cube-file":
+            print(f"Deleting {args.file} from the Cube...")
+            res = await delete_cube_file(args.file)
+            print(f"Server Response: {res}")
         elif args.command == "get-cube-free-space":
             print("Fetching free space on the Cube...")
             res = await get_cube_free_space()

@@ -59,6 +59,9 @@ python -m client.main get-cube-gif
 # 📂 List the files (gifs and images) stored on the Cube, with sizes in KB
 python -m client.main list-cube-contents
 
+# 🗑️ Delete a file from the Cube's memory
+python -m client.main delete-cube-file --file tmp.gif
+
 # 💾 Get the free storage space on the Cube display
 python -m client.main get-cube-free-space
 
@@ -138,6 +141,7 @@ from client.video_client import record_video, save_video
 from client.cube_client import (
     get_cube_current_gif,
     list_cube_contents,
+    delete_cube_file,
     get_cube_free_space,
     set_cube_gif,
     set_cube_brightness,
@@ -228,6 +232,10 @@ async def main():
     # 📂 List the files (gifs and images) stored on the Cube, with sizes in KB
     cube_contents = await list_cube_contents()
     print(f"Cube contents:\n{cube_contents}")
+
+    # 🗑️ Delete a file from the Cube's memory
+    delete_result = await delete_cube_file("tmp.gif")
+    print(delete_result)
 
     # 💾 Get the free storage space on the Cube display
     cube_space = await get_cube_free_space()

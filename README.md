@@ -70,6 +70,9 @@ python -m client.main get-cube-gif
 # 📂 List the files (gifs and images) stored on the Cube, with sizes in KB
 python -m client.main list-cube-contents
 
+# 🗑️ Delete a file from the Cube's memory
+python -m client.main delete-cube-file --file tmp.gif
+
 # 💾 Get the free storage space on the Cube display
 python -m client.main get-cube-free-space
 
@@ -164,6 +167,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube current gif (/img.json), file listing with sizes (cube://contents), free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, local image saving (media/images, 240x240 JPEG with black padding), permanent gallery image/gif show, gallery listing (gallery://images, gallery://gifs), random image cycling (media/images -> random.jpg) and random gif cycling tools
+│       └── cube.py     # Cube current gif (/img.json), file listing with sizes (cube://contents), file deletion (/delete?file=), free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, local image saving (media/images, 240x240 JPEG with black padding), permanent gallery image/gif show, gallery listing (gallery://images, gallery://gifs), random image cycling (media/images -> random.jpg) and random gif cycling tools
 └── tests/              # Integration tests
 ```

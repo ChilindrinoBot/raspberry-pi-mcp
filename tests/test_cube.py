@@ -12,7 +12,9 @@ from server.display import cube as cube_module
 from server.display.cube import (
     _fetch_cube_gifs,
     _fetch_cube_files,
+    _delete_cube_file,
     list_cube_contents,
+    delete_cube_file,
     _fetch_cube_space,
     get_cube_free_space,
     _set_cube_gif,
@@ -144,6 +146,83 @@ class ListCubeContentsTests(unittest.TestCase):
         self.assertIn("Failed to fetch contents from Cube", result)
         self.assertIn("timeout", result)
         mock_fetch.assert_called_once()
+
+
+class DeleteCubeFileTests(unittest.TestCase):
+    @patch("server.display.cube._delete_cube_file")
+    @patch(
+        "server.display.cube._fetch_cube_files",
+        side_effect=[[("tmp.gif", 460), ("old.jpg", 12)], [("old.jpg", 12)]],
+    )
+    def test_deletes_file_and_confirms(
+        self, mock_fetch: Mock, mock_delete: Mock
+    ) -> None:
+        result = delete_cube_file("tmp.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Deleted tmp.gif from Cube.", result["message"])
+        mock_delete.assert_called_once_with("tmp.gif")
+        self.assertEqual(mock_fetch.call_count, 2)
+
+    @patch("server.display.cube._delete_cube_file")
+    @patch("server.display.cube._fetch_cube_files", return_value=[("other.gif", 460)])
+    def test_rejects_when_file_not_found(self, mock_fetch: Mock, mock_delete: Mock) -> None:
+        result = delete_cube_file("missing.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("missing.gif was not found on the Cube.", result["message"])
+        mock_delete.assert_not_called()
+
+    @patch("server.display.cube._delete_cube_file", side_effect=RuntimeError("boom"))
+    @patch("server.display.cube._fetch_cube_files", return_value=[("tmp.gif", 460)])
+    def test_reports_error_when_delete_request_fails(
+        self, mock_fetch: Mock, mock_delete: Mock
+    ) -> None:
+        result = delete_cube_file("tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to delete tmp.gif from Cube", result["message"])
+        self.assertIn("boom", result["message"])
+
+    @patch("server.display.cube._delete_cube_file")
+    @patch(
+        "server.display.cube._fetch_cube_files",
+        side_effect=[[("tmp.gif", 460)], [("tmp.gif", 460)], [("tmp.gif", 460)], [("tmp.gif", 460)]],
+    )
+    def test_reports_error_when_file_still_listed_after_delete(
+        self, mock_fetch: Mock, mock_delete: Mock
+    ) -> None:
+        result = delete_cube_file("/tmp.gif")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("could not be confirmed", result["message"])
+        self.assertIn("still lists it", result["message"])
+        mock_delete.assert_called_once_with("tmp.gif")
+        self.assertEqual(mock_fetch.call_count, 4)
+
+    def test_helper_targets_image_dir_with_encoded_path(self) -> None:
+        with patch("server.display.cube.urllib.request.urlopen") as mock_urlopen:
+            _delete_cube_file("my file.gif")
+
+        requested = mock_urlopen.call_args[0][0]
+        self.assertIn("/delete?file=%2Fimage%2Fmy%20file.gif", requested)
+
+    def test_helper_does_not_duplicate_image_prefix(self) -> None:
+        with patch("server.display.cube.urllib.request.urlopen") as mock_urlopen:
+            _delete_cube_file("/image/tmp.gif")
+
+        requested = mock_urlopen.call_args[0][0]
+        self.assertIn("/delete?file=%2Fimage%2Ftmp.gif", requested)
+
+    def test_helper_raises_on_request_failure(self) -> None:
+        with patch(
+            "server.display.cube.urllib.request.urlopen",
+            side_effect=ConnectionRefusedError("connection refused"),
+        ):
+            with self.assertRaises(Exception) as ctx:
+                _delete_cube_file("tmp.gif")
+
+        self.assertIn("connection refused", str(ctx.exception))
 
 
 class FetchCubeSpaceTests(unittest.TestCase):
