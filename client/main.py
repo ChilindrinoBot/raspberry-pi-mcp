@@ -14,7 +14,7 @@ from .image_client import save_photo
 from .video_client import save_video
 from .cube_client import (
     get_cube_current_gif,
-    list_cube_gifs,
+    list_cube_contents,
     get_cube_free_space,
     set_cube_gif,
     set_cube_brightness,
@@ -134,8 +134,10 @@ async def run_cli():
     # Command 'get-cube-gif'
     subparsers.add_parser("get-cube-gif", help="Get the gif currently displayed on the Cube")
 
-    # Command 'list-cube-gifs'
-    subparsers.add_parser("list-cube-gifs", help="List gifs available on the Cube display")
+    # Command 'list-cube-contents'
+    subparsers.add_parser(
+        "list-cube-contents", help="List the files (gifs and images) stored on the Cube"
+    )
 
     # Command 'get-cube-free-space'
     subparsers.add_parser("get-cube-free-space", help="Get the free storage space on the Cube display")
@@ -348,9 +350,9 @@ async def run_cli():
             print("Fetching current Cube gif...")
             res = await get_cube_current_gif()
             print(f"\n{res}")
-        elif args.command == "list-cube-gifs":
-            print("Fetching gifs available on the Cube...")
-            res = await list_cube_gifs()
+        elif args.command == "list-cube-contents":
+            print("Fetching files stored on the Cube...")
+            res = await list_cube_contents()
             print(f"\n{res}")
         elif args.command == "get-cube-free-space":
             print("Fetching free space on the Cube...")

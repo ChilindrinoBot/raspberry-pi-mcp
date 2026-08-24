@@ -20,13 +20,13 @@ async def get_cube_current_gif() -> str:
         return result.contents[0].text
 
 
-async def list_cube_gifs() -> str:
-    """Fetches the list of gifs available on the Cube from the server resource."""
+async def list_cube_contents() -> str:
+    """Fetches the list of files (gifs and images) stored on the Cube, with sizes in KB."""
     async with Client(AuthTransport(SERVER_URL)) as client:
-        result = await client.read_resource("cube://gifs")
+        result = await client.read_resource("cube://contents")
 
         if not result.contents:
-            return "No gifs found on the Cube."
+            return "No files found on the Cube."
 
         return result.contents[0].text
 

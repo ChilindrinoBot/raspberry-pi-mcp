@@ -27,6 +27,11 @@ load_dotenv(ENV_PATH)
 CUBE_BASE_URL: Final[str] = os.environ.get("CUBE_BASE_URL", "").rstrip("/")
 
 _HREF_PATTERN: Final[re.Pattern[str]] = re.compile(r"href='([^']+)'")
+# /filelist renders one <tr> per stored file as
+# <td><a href='/name.ext'>name.ext</a></td><td>SIZE_IN_KB</td>...
+_FILELIST_ROW_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"<a href='([^']+)'>[^<]*</a>\s*</td>\s*<td>(\d+)\s*</td>", re.IGNORECASE
+)
 
 BRIGHTNESS_DEFAULT: Final[int] = 50
 BRIGHTNESS_MIN: Final[int] = 0
@@ -120,31 +125,40 @@ _RANDOM_CURRENT_IMAGE: str | None = None
 _RANDOM_IMAGE_MODE_LOCK: Final[threading.Lock] = threading.Lock()
 
 
-def _fetch_cube_gifs() -> list[str]:
-    """Fetch the /filelist page from the Cube and extract the available gif paths."""
+def _fetch_cube_files() -> list[tuple[str, int]]:
+    """Fetch the /filelist page from the Cube and return (path, size_kb) pairs."""
     url = f"{CUBE_BASE_URL}/filelist"
     html = urllib.request.urlopen(url).read().decode()
-    gifs = _HREF_PATTERN.findall(html)
-    return [gif.lstrip("/") for gif in gifs]
+    return [
+        (href.lstrip("/"), int(size_kb))
+        for href, size_kb in _FILELIST_ROW_PATTERN.findall(html)
+    ]
 
 
-@mcp.resource("cube://gifs")
-def list_cube_gifs() -> str:
+def _fetch_cube_gifs() -> list[str]:
+    """Fetch the /filelist page from the Cube and extract the stored file paths."""
+    return [name for name, _size_kb in _fetch_cube_files()]
+
+
+@mcp.resource("cube://contents")
+def list_cube_contents() -> str:
     """
-    Returns a list of gifs available on the Cube display.
+    Returns a list of the files (gifs and images) stored on the Cube display,
+    with sizes in KB.
     """
     if not CUBE_BASE_URL:
         return "CUBE_BASE_URL is not configured. Set it in the .env file."
 
     try:
-        gifs = _fetch_cube_gifs()
+        files = _fetch_cube_files()
     except Exception as e:
-        return f"Failed to fetch gifs from Cube: {e}"
+        return f"Failed to fetch contents from Cube: {e}"
 
-    if not gifs:
-        return "No gifs found on the Cube."
+    if not files:
+        return "No files found on the Cube."
 
-    return "Available Cube gifs:\n" + "\n".join(gifs)
+    lines = [f"{name} ({size_kb} KB)" for name, size_kb in files]
+    return "Available Cube files:\n" + "\n".join(lines)
 
 
 def _fetch_cube_space() -> tuple[int, int]:
@@ -1094,6 +1108,11 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
     }
 
 
+def _format_size_kb(size_bytes: int) -> str:
+    """Format a byte count as a human readable KB string, e.g. '12.3 KB'."""
+    return f"{size_bytes / 1024:.1f} KB"
+
+
 def _list_local_gifs() -> list[Path]:
     """List the .gif files available in RANDOM_GIF_DIR (empty when missing)."""
     if not RANDOM_GIF_DIR.is_dir():
@@ -1439,27 +1458,33 @@ def get_random_image_status() -> str:
 @mcp.resource("gallery://images")
 def list_gallery_images() -> str:
     """
-    Returns a list of images available in the local media/images gallery.
+    Returns a list of images available in the local media/images gallery,
+    with each file's size in KB.
     """
     images = _list_local_images()
 
     if not images:
         return f"No images found in {RANDOM_IMAGE_DIR}."
 
-    return "Available gallery images:\n" + "\n".join(path.name for path in images)
+    lines = [
+        f"{path.name} ({_format_size_kb(path.stat().st_size)})" for path in images
+    ]
+    return "Available gallery images:\n" + "\n".join(lines)
 
 
 @mcp.resource("gallery://gifs")
 def list_gallery_gifs() -> str:
     """
-    Returns a list of gifs available in the local media/gifs gallery.
+    Returns a list of gifs available in the local media/gifs gallery,
+    with each file's size in KB.
     """
     gifs = _list_local_gifs()
 
     if not gifs:
         return f"No gifs found in {RANDOM_GIF_DIR}."
 
-    return "Available gallery gifs:\n" + "\n".join(path.name for path in gifs)
+    lines = [f"{path.name} ({_format_size_kb(path.stat().st_size)})" for path in gifs]
+    return "Available gallery gifs:\n" + "\n".join(lines)
 
 
 @mcp.tool()

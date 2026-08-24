@@ -11,7 +11,8 @@ from PIL import Image
 from server.display import cube as cube_module
 from server.display.cube import (
     _fetch_cube_gifs,
-    list_cube_gifs,
+    _fetch_cube_files,
+    list_cube_contents,
     _fetch_cube_space,
     get_cube_free_space,
     _set_cube_gif,
@@ -44,12 +45,38 @@ from server.display.cube import (
 )
 
 SAMPLE_HTML = (
-    "<html><body>"
-    "<a href='/gif1.gif'>Gif One</a>"
-    "<a href='/image1.jpg'>Image One</a>"
-    "<a href='gif2.gif'>Gif Two</a>"
-    "</body></html>"
+    "<table id='list'><tbody>"
+    "<tr><th>#</th><th>Name</th><th>Size(KB)</th><th></th><th></th></tr>"
+    "<tr><td>1</td><td><a href='/gif1.gif'>Gif One</a></td><td>460</td>"
+    "<td>x</td><td>y</td></tr>"
+    "<tr><td>2</td><td><a href='/image1.jpg'>Image One</a></td><td>12</td>"
+    "<td>x</td><td>y</td></tr>"
+    "<tr><td>3</td><td><a href='gif2.gif'>Gif Two</a></td><td>70</td>"
+    "<td>x</td><td>y</td></tr>"
+    "</tbody></table>"
 )
+
+
+class FetchCubeFilesTests(unittest.TestCase):
+    def test_returns_names_with_sizes_in_kb(self) -> None:
+        with patch("server.display.cube.urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value.read.return_value = SAMPLE_HTML.encode()
+
+            files = _fetch_cube_files()
+
+        self.assertEqual(
+            files, [("gif1.gif", 460), ("image1.jpg", 12), ("gif2.gif", 70)]
+        )
+
+    def test_raises_on_connection_error(self) -> None:
+        with patch(
+            "server.display.cube.urllib.request.urlopen",
+            side_effect=ConnectionRefusedError("connection refused"),
+        ):
+            with self.assertRaises(Exception) as ctx:
+                _fetch_cube_files()
+
+            self.assertIn("connection refused", str(ctx.exception))
 
 
 class FetchCubeGifsTests(unittest.TestCase):
@@ -65,7 +92,9 @@ class FetchCubeGifsTests(unittest.TestCase):
 
     def test_strips_leading_slashes_from_relative_paths(self) -> None:
         with patch("server.display.cube.urllib.request.urlopen") as mock_urlopen:
-            mock_urlopen.return_value.read.return_value = b"<a href='sub/gif1.gif'>gif1</a>"
+            mock_urlopen.return_value.read.return_value = (
+                b"<tr><td>1</td><td><a href='sub/gif1.gif'>gif1</a></td><td>70</td></tr>"
+            )
 
             gifs = _fetch_cube_gifs()
 
@@ -82,34 +111,37 @@ class FetchCubeGifsTests(unittest.TestCase):
             self.assertIn("connection refused", str(ctx.exception))
 
 
-class ListCubeGifsTests(unittest.TestCase):
-    @patch("server.display.cube._fetch_cube_gifs", return_value=["gif1.gif", "image1.jpg"])
-    def test_returns_gif_list(self, mock_fetch: Mock) -> None:
-        result = list_cube_gifs()
+class ListCubeContentsTests(unittest.TestCase):
+    @patch(
+        "server.display.cube._fetch_cube_files",
+        return_value=[("gif1.gif", 460), ("image1.jpg", 12)],
+    )
+    def test_returns_file_list_with_sizes(self, mock_fetch: Mock) -> None:
+        result = list_cube_contents()
 
-        self.assertIn("Available Cube gifs:", result)
-        self.assertIn("gif1.gif", result)
-        self.assertIn("image1.jpg", result)
+        self.assertIn("Available Cube files:", result)
+        self.assertIn("gif1.gif (460 KB)", result)
+        self.assertIn("image1.jpg (12 KB)", result)
         mock_fetch.assert_called_once()
 
     def test_returns_not_configured_when_no_base_url(self) -> None:
         with patch("server.display.cube.CUBE_BASE_URL", ""):
-            result = list_cube_gifs()
+            result = list_cube_contents()
 
         self.assertIn("CUBE_BASE_URL is not configured", result)
 
-    @patch("server.display.cube._fetch_cube_gifs", return_value=[])
+    @patch("server.display.cube._fetch_cube_files", return_value=[])
     def test_returns_no_gifs_found_when_empty(self, mock_fetch: Mock) -> None:
-        result = list_cube_gifs()
+        result = list_cube_contents()
 
-        self.assertEqual(result, "No gifs found on the Cube.")
+        self.assertEqual(result, "No files found on the Cube.")
         mock_fetch.assert_called_once()
 
-    @patch("server.display.cube._fetch_cube_gifs", side_effect=RuntimeError("timeout"))
+    @patch("server.display.cube._fetch_cube_files", side_effect=RuntimeError("timeout"))
     def test_returns_error_on_fetch_failure(self, mock_fetch: Mock) -> None:
-        result = list_cube_gifs()
+        result = list_cube_contents()
 
-        self.assertIn("Failed to fetch gifs from Cube", result)
+        self.assertIn("Failed to fetch contents from Cube", result)
         self.assertIn("timeout", result)
         mock_fetch.assert_called_once()
 
@@ -1152,7 +1184,9 @@ class GalleryResourcesTests(unittest.TestCase):
 
         result = list_gallery_images()
 
-        self.assertEqual(result, "Available gallery images:\na.jpeg\nb.jpg")
+        self.assertEqual(
+            result, "Available gallery images:\na.jpeg (0.0 KB)\nb.jpg (0.0 KB)"
+        )
 
     def test_ignores_non_image_files_in_images_gallery(self) -> None:
         (self._images_dir / "photo.jpg").write_bytes(b"jpg")
@@ -1161,7 +1195,7 @@ class GalleryResourcesTests(unittest.TestCase):
 
         result = list_gallery_images()
 
-        self.assertEqual(result, "Available gallery images:\nphoto.jpg")
+        self.assertEqual(result, "Available gallery images:\nphoto.jpg (0.0 KB)")
 
     def test_reports_no_images_when_gallery_empty(self) -> None:
         result = list_gallery_images()
@@ -1183,7 +1217,7 @@ class GalleryResourcesTests(unittest.TestCase):
 
         result = list_gallery_gifs()
 
-        self.assertEqual(result, "Available gallery gifs:\na.gif\nb.gif")
+        self.assertEqual(result, "Available gallery gifs:\na.gif (0.0 KB)\nb.gif (0.0 KB)")
 
     def test_ignores_non_gif_files_in_gifs_gallery(self) -> None:
         (self._gifs_dir / "anim.gif").write_bytes(b"gif")
@@ -1192,7 +1226,7 @@ class GalleryResourcesTests(unittest.TestCase):
 
         result = list_gallery_gifs()
 
-        self.assertEqual(result, "Available gallery gifs:\nanim.gif")
+        self.assertEqual(result, "Available gallery gifs:\nanim.gif (0.0 KB)")
 
     def test_reports_no_gifs_when_gallery_empty(self) -> None:
         result = list_gallery_gifs()

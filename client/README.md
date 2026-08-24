@@ -56,8 +56,8 @@ python -m client.main record-video --output video.mp4 --duration 15 --fps 10
 # 🧊 Get the gif currently displayed on the Cube
 python -m client.main get-cube-gif
 
-# 📂 List images available on the Cube display
-python -m client.main list-cube-gifs
+# 📂 List the files (gifs and images) stored on the Cube, with sizes in KB
+python -m client.main list-cube-contents
 
 # 💾 Get the free storage space on the Cube display
 python -m client.main get-cube-free-space
@@ -137,7 +137,7 @@ from client.image_client import take_photo, save_photo
 from client.video_client import record_video, save_video
 from client.cube_client import (
     get_cube_current_gif,
-    list_cube_gifs,
+    list_cube_contents,
     get_cube_free_space,
     set_cube_gif,
     set_cube_brightness,
@@ -225,9 +225,9 @@ async def main():
     current_gif = await get_cube_current_gif()
     print(f"Cube current gif: {current_gif}")
 
-    # 🧊 List images available on the Cube display
-    cube_gifs = await list_cube_gifs()
-    print(f"Cube gifs:\n{cube_gifs}")
+    # 📂 List the files (gifs and images) stored on the Cube, with sizes in KB
+    cube_contents = await list_cube_contents()
+    print(f"Cube contents:\n{cube_contents}")
 
     # 💾 Get the free storage space on the Cube display
     cube_space = await get_cube_free_space()

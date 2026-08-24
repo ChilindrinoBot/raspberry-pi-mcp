@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 from client.cube_client import (
     get_cube_current_gif,
-    list_cube_gifs,
+    list_cube_contents,
     get_cube_free_space,
     set_cube_gif,
     set_cube_brightness,
@@ -33,53 +33,53 @@ def _make_client_mock():
     return ctx, mock_client
 
 
-class ListCubeGifsClientTests(unittest.TestCase):
+class ListCubeContentsClientTests(unittest.TestCase):
     @patch("client.cube_client.Client")
     def test_connects_to_http_server(self, MockClient) -> None:
-        """list_cube_gifs must connect to the configured HTTP URL."""
+        """list_cube_contents must connect to the configured HTTP URL."""
         ctx, mock_client = _make_client_mock()
         mock_client.read_resource.return_value = type(
-            "Obj", (), {"contents": [type("Obj", (), {"text": "Available Cube gifs:\ngif1.gif"})()]}
+            "Obj", (), {"contents": [type("Obj", (), {"text": "Available Cube files:\ngif1.gif (12 KB)"})()]}
         )()
         MockClient.return_value = ctx
 
-        asyncio.run(list_cube_gifs())
+        asyncio.run(list_cube_contents())
 
         MockClient.assert_called_once()
 
     @patch("client.cube_client.Client")
-    def test_reads_cube_gifs_resource(self, MockClient) -> None:
+    def test_reads_cube_contents_resource(self, MockClient) -> None:
         ctx, mock_client = _make_client_mock()
         mock_client.read_resource.return_value = type(
-            "Obj", (), {"contents": [type("Obj", (), {"text": "Available Cube gifs:\ngif1.gif"})()]}
+            "Obj", (), {"contents": [type("Obj", (), {"text": "Available Cube files:\ngif1.gif (12 KB)"})()]}
         )()
         MockClient.return_value = ctx
 
-        asyncio.run(list_cube_gifs())
+        asyncio.run(list_cube_contents())
 
-        mock_client.read_resource.assert_called_once_with("cube://gifs")
+        mock_client.read_resource.assert_called_once_with("cube://contents")
 
     @patch("client.cube_client.Client")
-    def test_returns_gif_list(self, MockClient) -> None:
+    def test_returns_file_list(self, MockClient) -> None:
         ctx, mock_client = _make_client_mock()
         mock_client.read_resource.return_value = type(
-            "Obj", (), {"contents": [type("Obj", (), {"text": "Available Cube gifs:\ngif1.gif"})()]}
+            "Obj", (), {"contents": [type("Obj", (), {"text": "Available Cube files:\ngif1.gif (12 KB)"})()]}
         )()
         MockClient.return_value = ctx
 
-        result = asyncio.run(list_cube_gifs())
+        result = asyncio.run(list_cube_contents())
 
-        self.assertIn("gif1.gif", result)
+        self.assertIn("gif1.gif (12 KB)", result)
 
     @patch("client.cube_client.Client")
-    def test_returns_no_gifs_found_when_empty(self, MockClient) -> None:
+    def test_returns_no_files_found_when_empty(self, MockClient) -> None:
         ctx, mock_client = _make_client_mock()
         mock_client.read_resource.return_value = type("Obj", (), {"contents": []})()
         MockClient.return_value = ctx
 
-        result = asyncio.run(list_cube_gifs())
+        result = asyncio.run(list_cube_contents())
 
-        self.assertEqual(result, "No gifs found on the Cube.")
+        self.assertEqual(result, "No files found on the Cube.")
 
 
 class GetCubeFreeSpaceClientTests(unittest.TestCase):
