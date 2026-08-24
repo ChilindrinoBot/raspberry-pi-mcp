@@ -22,6 +22,7 @@ from .audio import (
     get_mic_volume,
 )
 from .display import (
+    clear_cube_contents,
     delete_cube_file,
     list_cube_contents,
     get_cube_current_gif,
@@ -65,6 +66,7 @@ __all__ = [
     "set_mic_volume",
     "get_mic_mute_state_resource",
     "get_mic_volume",
+    "clear_cube_contents",
     "delete_cube_file",
     "list_cube_contents",
     "get_cube_current_gif",

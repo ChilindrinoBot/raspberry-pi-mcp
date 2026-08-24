@@ -13,8 +13,10 @@ from server.display.cube import (
     _fetch_cube_gifs,
     _fetch_cube_files,
     _delete_cube_file,
+    _clear_cube_contents_request,
     list_cube_contents,
     delete_cube_file,
+    clear_cube_contents,
     _fetch_cube_space,
     get_cube_free_space,
     _set_cube_gif,
@@ -223,6 +225,69 @@ class DeleteCubeFileTests(unittest.TestCase):
                 _delete_cube_file("tmp.gif")
 
         self.assertIn("connection refused", str(ctx.exception))
+
+
+class ClearCubeContentsTests(unittest.TestCase):
+    @patch("server.display.cube._clear_cube_contents_request")
+    @patch(
+        "server.display.cube._fetch_cube_files",
+        side_effect=[[("tmp.gif", 460), ("old.jpg", 12)], []],
+    )
+    def test_clears_and_confirms_empty(self, mock_fetch: Mock, mock_clear: Mock) -> None:
+        result = clear_cube_contents()
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Cleared 2 files from Cube.", result["message"])
+        mock_clear.assert_called_once()
+        self.assertEqual(mock_fetch.call_count, 2)
+
+    @patch("server.display.cube._clear_cube_contents_request")
+    @patch("server.display.cube._fetch_cube_files", return_value=[])
+    def test_returns_no_files_when_empty(self, mock_fetch: Mock, mock_clear: Mock) -> None:
+        result = clear_cube_contents()
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("No files to clear", result["message"])
+        mock_clear.assert_not_called()
+
+    @patch("server.display.cube._clear_cube_contents_request", side_effect=RuntimeError("boom"))
+    @patch(
+        "server.display.cube._fetch_cube_files",
+        return_value=[("tmp.gif", 460)],
+    )
+    def test_reports_error_when_clear_request_fails(self, mock_fetch: Mock, mock_clear: Mock) -> None:
+        result = clear_cube_contents()
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to clear Cube contents", result["message"])
+        self.assertIn("boom", result["message"])
+
+    @patch("server.display.cube._clear_cube_contents_request")
+    @patch(
+        "server.display.cube._fetch_cube_files",
+        side_effect=[
+            [("tmp.gif", 460)],
+            [("tmp.gif", 460)],
+            [("tmp.gif", 460)],
+            [("tmp.gif", 460)],
+        ],
+    )
+    def test_reports_error_when_still_listed_after_clear(
+        self, mock_fetch: Mock, mock_clear: Mock
+    ) -> None:
+        result = clear_cube_contents()
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("could not be confirmed", result["message"])
+        self.assertIn("still lists", result["message"])
+        self.assertEqual(mock_fetch.call_count, 4)
+
+    def test_helper_sends_clear_request(self) -> None:
+        with patch("server.display.cube.urllib.request.urlopen") as mock_urlopen:
+            _clear_cube_contents_request()
+
+        requested = mock_urlopen.call_args[0][0]
+        self.assertIn("/set?clear=image", requested)
 
 
 class FetchCubeSpaceTests(unittest.TestCase):

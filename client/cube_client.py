@@ -38,6 +38,13 @@ async def delete_cube_file(filename: str) -> dict[str, str]:
         return result.structured_content
 
 
+async def clear_cube_contents() -> dict[str, str]:
+    """Requests the server to clear all files from the Cube's memory."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool("clear_cube_contents", {})
+        return result.structured_content
+
+
 async def get_cube_free_space() -> str:
     """Fetches the free storage space available on the Cube from the server resource."""
     async with Client(AuthTransport(SERVER_URL)) as client:

@@ -226,6 +226,57 @@ def delete_cube_file(filename: str) -> dict[str, str]:
     }
 
 
+def _clear_cube_contents_request() -> str:
+    """Send the Cube's clear request (GET /set?clear=image)."""
+    url = f"{CUBE_BASE_URL}/set?clear=image"
+    return urllib.request.urlopen(url).read().decode().strip()
+
+
+@mcp.tool()
+def clear_cube_contents() -> dict[str, str]:
+    """
+    Clears all files from the Cube's memory (not the local gallery).
+
+    Sends GET /set?clear=image to the Cube and confirms the file list is
+    empty before reporting success.
+    """
+    if not CUBE_BASE_URL:
+        return {
+            "status": "error",
+            "message": "CUBE_BASE_URL is not configured. Set it in the .env file.",
+        }
+
+    try:
+        files_before = _fetch_cube_files()
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to fetch contents from Cube: {e}"}
+
+    if not files_before:
+        return {"status": "success", "message": "No files to clear on Cube."}
+
+    count = len(files_before)
+    try:
+        _clear_cube_contents_request()
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to clear Cube contents: {e}"}
+
+    for _attempt in range(3):
+        try:
+            remaining = _fetch_cube_files()
+        except Exception as e:
+            return {"status": "error", "message": f"Failed to verify clear on Cube: {e}"}
+
+        if not remaining:
+            return {"status": "success", "message": f"Cleared {count} files from Cube."}
+
+        time.sleep(1)
+
+    return {
+        "status": "error",
+        "message": f"Clear could not be confirmed: the Cube still lists {len(remaining)} files.",
+    }
+
+
 def _fetch_cube_space() -> tuple[int, int]:
     """Fetch the /space.json endpoint from the Cube and return (free, total) bytes."""
     url = f"{CUBE_BASE_URL}/space.json"

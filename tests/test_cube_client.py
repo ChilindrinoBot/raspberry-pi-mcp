@@ -9,6 +9,7 @@ from client.cube_client import (
     get_cube_current_gif,
     list_cube_contents,
     delete_cube_file,
+    clear_cube_contents,
     get_cube_free_space,
     set_cube_gif,
     set_cube_brightness,
@@ -315,6 +316,34 @@ class DeleteCubeFileClientTests(unittest.TestCase):
         )
         self.assertEqual(result["status"], "success")
         self.assertIn("Deleted tmp.gif", result["message"])
+
+
+class ClearCubeContentsClientTests(unittest.TestCase):
+    @patch("client.cube_client.Client")
+    def test_connects_to_http_server(self, MockClient) -> None:
+        """clear_cube_contents must connect to the configured HTTP URL."""
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Cleared 2 files from Cube."}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(clear_cube_contents())
+
+        MockClient.assert_called_once()
+
+    @patch("client.cube_client.Client")
+    def test_calls_clear_cube_contents_tool(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Cleared 2 files from Cube."}}
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(clear_cube_contents())
+
+        mock_client.call_tool.assert_called_once_with("clear_cube_contents", {})
+        self.assertEqual(result["status"], "success")
 
 
 class SetCubeBrightnessClientTests(unittest.TestCase):
