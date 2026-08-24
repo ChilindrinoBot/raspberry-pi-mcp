@@ -337,12 +337,12 @@ class StartRandomImagesTests(ImageModeStateTestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertIn("first.jpg is displayed as random.jpg", result["message"])
-        self.assertIn("every 60 seconds", result["message"])
+        self.assertIn("every 300 seconds", result["message"])
         self.assertEqual(cube_module._RANDOM_CURRENT_IMAGE, "first.jpg")
         self.assertTrue(cube_module._RANDOM_IMAGE_MODE_RUNNING)
         mock_cycle.assert_called_once_with(None)
         mock_thread_cls.assert_called_once_with(
-            target=cube_module._random_image_loop, args=(60, "first.jpg"), daemon=True
+            target=cube_module._random_image_loop, args=(300, "first.jpg"), daemon=True
         )
         mock_thread_cls.return_value.start.assert_called_once()
 

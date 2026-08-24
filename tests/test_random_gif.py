@@ -353,12 +353,12 @@ class StartRandomGifsTests(RandomModeStateTestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertIn("first.gif is displayed as random.gif", result["message"])
-        self.assertIn("every 60 seconds", result["message"])
+        self.assertIn("every 300 seconds", result["message"])
         self.assertEqual(cube_module._RANDOM_CURRENT_GIF, "first.gif")
         self.assertTrue(cube_module._RANDOM_MODE_RUNNING)
         mock_cycle.assert_called_once_with(None)
         mock_thread_cls.assert_called_once_with(
-            target=cube_module._random_gif_loop, args=(60, "first.gif"), daemon=True
+            target=cube_module._random_gif_loop, args=(300, "first.gif"), daemon=True
         )
         mock_thread_cls.return_value.start.assert_called_once()
 

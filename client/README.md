@@ -107,8 +107,8 @@ python -m client.main list-gallery-gifs
 # ⏱️ Show an image temporarily on the Cube (default 5 s, max 30 s, non-blocking; other formats are converted)
 python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
 
-# 🎲 Start cycling random images from media/images as random.jpg (must be 240x240, default 60 s, max 3600 s)
-python -m client.main start-random-images --seconds 60
+# 🎲 Start cycling random images from media/images as random.jpg (must be 240x240, default 300 s / 5 min, max 3600 s)
+python -m client.main start-random-images --seconds 300
 
 # 🔍 Get which temporary image (random.jpg) is currently being used on the Cube
 python -m client.main get-current-random-image
@@ -116,8 +116,8 @@ python -m client.main get-current-random-image
 # 🛑 Stop cycling random images on the Cube (the last random.jpg stays displayed)
 python -m client.main stop-random-images
 
-# 🎲 Start cycling random gifs from media/gifs as random.gif (default 60 s, max 3600 s)
-python -m client.main start-random-gifs --seconds 60
+# 🎲 Start cycling random gifs from media/gifs as random.gif (default 300 s / 5 min, max 3600 s)
+python -m client.main start-random-gifs --seconds 300
 
 # 🔍 Get which temporary gif (random.gif) is currently being used on the Cube
 python -m client.main get-current-random-gif
@@ -310,8 +310,8 @@ async def main():
 
     # 🎲 Start cycling random images from media/images as random.jpg.
     # Images must be 240x240. A new random image is uploaded and displayed
-    # every N seconds (default 60).
-    result = await start_random_cube_images(seconds=60)
+    # every N seconds (default 300 / 5 min).
+    result = await start_random_cube_images(seconds=300)
     print(f"Random images started: {result}")
 
     # 🔍 Get which temporary image (random.jpg) is currently being used.
@@ -323,8 +323,8 @@ async def main():
     print(f"Random images stopped: {result}")
 
     # 🎲 Start cycling random gifs from media/gifs as random.gif.
-    # A new random gif is uploaded and displayed every N seconds (default 60).
-    result = await start_random_cube_gifs(seconds=60)
+    # A new random gif is uploaded and displayed every N seconds (default 300 / 5 min).
+    result = await start_random_cube_gifs(seconds=300)
     print(f"Random gifs started: {result}")
 
     # 🔍 Get which temporary gif (random.gif) is currently being used.

@@ -86,7 +86,7 @@ RANDOM_GIF_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "media" / "g
 # new random gif simply overwrites the previous one.
 RANDOM_GIF_NAME: Final[str] = "random.gif"
 
-RANDOM_GIF_DEFAULT_SECONDS: Final[int] = 60
+RANDOM_GIF_DEFAULT_SECONDS: Final[int] = 300
 RANDOM_GIF_MIN_SECONDS: Final[int] = 5
 RANDOM_GIF_MAX_SECONDS: Final[int] = 3600
 
@@ -112,7 +112,7 @@ LOCAL_IMAGE_SUFFIXES: Final[frozenset[str]] = frozenset({".jpg", ".jpeg"})
 # new random image simply overwrites the previous one.
 RANDOM_IMAGE_NAME: Final[str] = "random.jpg"
 
-RANDOM_IMAGE_DEFAULT_SECONDS: Final[int] = 60
+RANDOM_IMAGE_DEFAULT_SECONDS: Final[int] = 300
 RANDOM_IMAGE_MIN_SECONDS: Final[int] = 5
 RANDOM_IMAGE_MAX_SECONDS: Final[int] = 3600
 
@@ -1618,7 +1618,7 @@ def start_random_gifs(seconds: int = RANDOM_GIF_DEFAULT_SECONDS) -> dict[str, st
 
     Args:
         seconds: Seconds each gif stays on screen before switching to the next
-            random gif (default 60 = 1 minute, clamped to [5, 3600]).
+            random gif (default 300 = 5 minutes, clamped to [5, 3600]).
     """
     global _RANDOM_MODE_RUNNING, _RANDOM_MODE_SUSPENDED, _RANDOM_CURRENT_GIF
 
@@ -1708,7 +1708,7 @@ def start_random_images(seconds: int = RANDOM_IMAGE_DEFAULT_SECONDS) -> dict[str
 
     Args:
         seconds: Seconds each image stays on screen before switching to the
-            next random image (default 60 = 1 minute, clamped to [5, 3600]).
+            next random image (default 300 = 5 minutes, clamped to [5, 3600]).
     """
     global _RANDOM_IMAGE_MODE_RUNNING, _RANDOM_IMAGE_MODE_SUSPENDED, _RANDOM_CURRENT_IMAGE
 

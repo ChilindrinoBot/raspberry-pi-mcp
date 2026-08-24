@@ -258,8 +258,8 @@ async def run_cli():
     random_gif_parser.add_argument(
         "--seconds",
         type=int,
-        default=60,
-        help="Seconds each gif is shown before switching to another random gif (default 60)",
+        default=300,
+        help="Seconds each gif is shown before switching to another random gif (default 300 = 5 min)",
     )
 
     # Command 'stop-random-gifs'
@@ -278,8 +278,8 @@ async def run_cli():
     random_image_parser.add_argument(
         "--seconds",
         type=int,
-        default=60,
-        help="Seconds each image is shown before switching to another random image (default 60)",
+        default=300,
+        help="Seconds each image is shown before switching to another random image (default 300 = 5 min)",
     )
 
     # Command 'stop-random-images'

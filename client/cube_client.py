@@ -196,11 +196,11 @@ async def get_random_gif_status() -> str:
         return result.contents[0].text
 
 
-async def start_random_cube_gifs(seconds: int = 60) -> dict[str, str]:
+async def start_random_cube_gifs(seconds: int = 300) -> dict[str, str]:
     """Requests the server to start cycling random gifs as random.gif on the Cube.
 
     A new random gif from media/gifs is uploaded and displayed every
-    `seconds` (default 60 = 1 minute) until stop is requested.
+    `seconds` (default 300 = 5 minutes) until stop is requested.
     """
     async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool("start_random_gifs", {"seconds": seconds})
@@ -225,11 +225,11 @@ async def get_random_image_status() -> str:
         return result.contents[0].text
 
 
-async def start_random_cube_images(seconds: int = 60) -> dict[str, str]:
+async def start_random_cube_images(seconds: int = 300) -> dict[str, str]:
     """Requests the server to start cycling random images as random.jpg on the Cube.
 
     A new random image from media/images is uploaded and displayed every
-    `seconds` (default 60 = 1 minute) until stop is requested.
+    `seconds` (default 300 = 5 minutes) until stop is requested.
     """
     async with Client(AuthTransport(SERVER_URL)) as client:
         result = await client.call_tool("start_random_images", {"seconds": seconds})
