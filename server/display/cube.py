@@ -124,6 +124,23 @@ _RANDOM_IMAGE_MODE_SUSPENDED: bool = False
 _RANDOM_CURRENT_IMAGE: str | None = None
 _RANDOM_IMAGE_MODE_LOCK: Final[threading.Lock] = threading.Lock()
 
+# Special routine (e.g. pato-gira) mode state. Alternates between the two
+# gifs of a routine stored under media/special/gifs/<routine> (e.g. pato-gira
+# contains pato-gira.gif and pato-gira-rev.gif). The cube memory is cleared
+# first, both gifs are uploaded, then displayed in a continuous 60s (1 min) loop
+# simple sin calculos extra.
+SPECIAL_GIF_ROOT: Final[Path] = Path(__file__).resolve().parents[2] / "media" / "special" / "gifs"
+SPECIAL_DEFAULT_SECONDS: Final[int] = 60
+SPECIAL_MIN_SECONDS: Final[int] = 1
+SPECIAL_MAX_SECONDS: Final[int] = 3600
+_SPECIAL_MODE_RUNNING: bool = False
+_SPECIAL_MODE_SUSPENDED: bool = False
+_SPECIAL_CURRENT_GIF: str | None = None
+_SPECIAL_CURRENT_ROUTINE: str | None = None
+_SPECIAL_GIFS: list[str] | None = None
+_SPECIAL_INTERVAL: int | None = None
+_SPECIAL_MODE_LOCK: Final[threading.Lock] = threading.Lock()
+
 
 def _fetch_cube_files() -> list[tuple[str, int]]:
     """Fetch the /filelist page from the Cube and return (path, size_kb) pairs."""
@@ -516,6 +533,7 @@ def set_cube_gif(gif: str) -> dict[str, str]:
 
     was_running_gif, _previous_random = _stop_random_mode()
     was_running_image, _previous_random_image = _stop_image_mode()
+    was_running_special, _previous_special = _stop_special_mode()
 
     try:
         response = _set_cube_gif(gif)
@@ -533,6 +551,8 @@ def set_cube_gif(gif: str) -> dict[str, str]:
         parts.append("Random gif mode stopped.")
     if was_running_image:
         parts.append("Random image mode stopped.")
+    if was_running_special:
+        parts.append("Special routine stopped.")
     if response:
         parts.append(f"Device response: {response}")
 
@@ -916,6 +936,7 @@ def show_gallery_image(filename: str) -> dict[str, str]:
 
     was_running_gif, _previous_random = _stop_random_mode()
     was_running_image, _previous_random_image = _stop_image_mode()
+    was_running_special, _previous_special = _stop_special_mode()
 
     try:
         response = _set_cube_gif(upload_name)
@@ -933,6 +954,8 @@ def show_gallery_image(filename: str) -> dict[str, str]:
         parts.append("Random gif mode stopped.")
     if was_running_image:
         parts.append("Random image mode stopped.")
+    if was_running_special:
+        parts.append("Special routine stopped.")
     if response:
         parts.append(f"Device response: {response}")
 
@@ -1033,6 +1056,7 @@ def show_gallery_gif(filename: str) -> dict[str, str]:
 
     was_running_gif, _previous_random = _stop_random_mode()
     was_running_image, _previous_random_image = _stop_image_mode()
+    was_running_special, _previous_special = _stop_special_mode()
 
     try:
         response = _set_cube_gif(f"{TEMP_GIF_NAME}.gif")
@@ -1050,6 +1074,8 @@ def show_gallery_gif(filename: str) -> dict[str, str]:
         parts.append("Random gif mode stopped.")
     if was_running_image:
         parts.append("Random image mode stopped.")
+    if was_running_special:
+        parts.append("Special routine stopped.")
     if response:
         parts.append(f"Device response: {response}")
 
@@ -1057,14 +1083,18 @@ def show_gallery_gif(filename: str) -> dict[str, str]:
 
 
 def _restore_previous_gif(
-    previous: str, seconds: int, resume_random: bool = False, resume_image: bool = False
+    previous: str,
+    seconds: int,
+    resume_random: bool = False,
+    resume_image: bool = False,
+    resume_special: bool = False,
 ) -> None:
     """Sleep for `seconds` and then restore the previous gif on the Cube.
 
     Runs in a background thread after show_temporary_gif has already replied,
     so any error here cannot be reported back to the client. When
-    `resume_random`/`resume_image` is True the suspended random gif/image mode
-    is resumed after the restore.
+    `resume_random`/`resume_image`/`resume_special` is True the suspended
+    random gif/image/special mode is resumed after the restore.
     """
     global _TEMP_GIF_RUNNING
 
@@ -1081,6 +1111,8 @@ def _restore_previous_gif(
             _resume_random_mode()
         if resume_image:
             _resume_image_mode()
+        if resume_special:
+            _resume_special_mode()
 
 
 @mcp.tool()
@@ -1140,6 +1172,7 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
 
     was_running_random = _suspend_random_mode()
     was_running_image = _suspend_image_mode()
+    was_running_special = _suspend_special_mode()
 
     try:
         current = _fetch_cube_current_gif()
@@ -1148,6 +1181,8 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
             _resume_random_mode()
         if was_running_image:
             _resume_image_mode()
+        if was_running_special:
+            _resume_special_mode()
         return {"status": "error", "message": f"Failed to read current gif from Cube: {e}"}
 
     result = upload_cube_image(base64.b64encode(payload).decode("ascii"), tmp_name)
@@ -1156,6 +1191,8 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
             _resume_random_mode()
         if was_running_image:
             _resume_image_mode()
+        if was_running_special:
+            _resume_special_mode()
         return result
 
     with _TEMP_GIF_LOCK:
@@ -1164,6 +1201,8 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
                 _resume_random_mode()
             if was_running_image:
                 _resume_image_mode()
+            if was_running_special:
+                _resume_special_mode()
             return {
                 "status": "error",
                 "message": "A temporary gif is already being shown. Wait for it to finish before starting another.",
@@ -1179,6 +1218,8 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
             _resume_random_mode()
         if was_running_image:
             _resume_image_mode()
+        if was_running_special:
+            _resume_special_mode()
         return {"status": "error", "message": f"Failed to display temporary gif {tmp_name}: {e}"}
 
     if "FAIL" in response.upper():
@@ -1188,6 +1229,8 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
             _resume_random_mode()
         if was_running_image:
             _resume_image_mode()
+        if was_running_special:
+            _resume_special_mode()
         return {
             "status": "error",
             "message": f"Cube refused to display temporary gif {tmp_name}. Response: {response}",
@@ -1196,7 +1239,7 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
     previous = current.removeprefix(f"{CUBE_IMAGE_DIR}/").lstrip("/")
     threading.Thread(
         target=_restore_previous_gif,
-        args=(previous, clamped, was_running_random, was_running_image),
+        args=(previous, clamped, was_running_random, was_running_image, was_running_special),
         daemon=True,
     ).start()
 
@@ -1205,6 +1248,8 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
         paused_note = " Random gif mode paused (it will resume automatically)."
     elif was_running_image:
         paused_note = " Random image mode paused (it will resume automatically)."
+    elif was_running_special:
+        paused_note = " Special routine paused (it will resume automatically)."
 
     if not previous:
         return {
@@ -1359,6 +1404,109 @@ def _resume_image_mode() -> None:
 
     with _RANDOM_IMAGE_MODE_LOCK:
         _RANDOM_IMAGE_MODE_SUSPENDED = False
+
+
+# --- Special routine helpers ---
+
+def _list_special_gifs(routine: str) -> list[Path]:
+    """List gif files for a given special routine (sorted)."""
+    routine_dir = SPECIAL_GIF_ROOT / routine
+    if not routine_dir.is_dir():
+        return []
+    return sorted(
+        p for p in routine_dir.iterdir() if p.is_file() and p.suffix.lower() == ".gif"
+    )
+
+
+def _list_special_routines() -> list[str]:
+    """List available special routines (subdirectories under SPECIAL_GIF_ROOT)."""
+    if not SPECIAL_GIF_ROOT.is_dir():
+        return []
+    return sorted(p.name for p in SPECIAL_GIF_ROOT.iterdir() if p.is_dir())
+
+
+def _is_special_mode_running() -> bool:
+    with _SPECIAL_MODE_LOCK:
+        return _SPECIAL_MODE_RUNNING
+
+
+def _is_special_mode_suspended() -> bool:
+    with _SPECIAL_MODE_LOCK:
+        return _SPECIAL_MODE_SUSPENDED
+
+
+def _stop_special_mode() -> tuple[bool, str | None]:
+    """Stop the special routine mode entirely. Returns (was_running, current_gif)."""
+    global _SPECIAL_MODE_RUNNING, _SPECIAL_MODE_SUSPENDED
+    with _SPECIAL_MODE_LOCK:
+        was_running = _SPECIAL_MODE_RUNNING
+        _SPECIAL_MODE_RUNNING = False
+        _SPECIAL_MODE_SUSPENDED = False
+        return was_running, _SPECIAL_CURRENT_GIF
+
+
+def _suspend_special_mode() -> bool:
+    """Pause the special routine loop while a temporary gif borrows the screen."""
+    global _SPECIAL_MODE_SUSPENDED
+    with _SPECIAL_MODE_LOCK:
+        if not _SPECIAL_MODE_RUNNING:
+            return False
+        _SPECIAL_MODE_SUSPENDED = True
+        return True
+
+
+def _resume_special_mode() -> None:
+    """Lift a suspension made by _suspend_special_mode."""
+    global _SPECIAL_MODE_SUSPENDED
+    with _SPECIAL_MODE_LOCK:
+        _SPECIAL_MODE_SUSPENDED = False
+
+
+def _sleep_interruptible_for_special(total_seconds: int) -> None:
+    """Sleep interruptibly for the special routine (respects suspend/display off)."""
+    _wait_between_cycles(total_seconds, _is_special_mode_running, _is_special_mode_suspended)
+
+
+def _special_loop(seconds: int, gifs: list[str]) -> None:
+    """Continuously switch between the uploaded special gifs every `seconds`.
+
+    Simple timer sin restricciones: solo duerme `seconds` y cambia gif.
+    Corre en background thread tras start_special_routine. Usa sleep
+    interrumpible por 1s para responder rapido a stop.
+    """
+    global _SPECIAL_MODE_RUNNING, _SPECIAL_CURRENT_GIF
+    if not gifs:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return
+    try:
+        with _SPECIAL_MODE_LOCK:
+            current = _SPECIAL_CURRENT_GIF
+        idx = gifs.index(current) if current in gifs else 0
+    except ValueError:
+        idx = 0
+    try:
+        while _is_special_mode_running():
+            # simple timer: sleep seconds en pasos de 1s para parar rapido
+            for _ in range(seconds):
+                if not _is_special_mode_running():
+                    break
+                time.sleep(1)
+            if not _is_special_mode_running():
+                break
+            idx = (idx + 1) % len(gifs)
+            next_gif = gifs[idx]
+            try:
+                response = _set_cube_gif(next_gif)
+                if "FAIL" in response.upper():
+                    continue
+                with _SPECIAL_MODE_LOCK:
+                    _SPECIAL_CURRENT_GIF = next_gif
+            except Exception:
+                continue
+    finally:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
 
 
 def _is_cube_display_on() -> bool:
@@ -1648,6 +1796,7 @@ def start_random_gifs(seconds: int = RANDOM_GIF_DEFAULT_SECONDS) -> dict[str, st
         _RANDOM_MODE_SUSPENDED = False
 
     image_was_running, _previous_image = _stop_image_mode()
+    special_was_running, _previous_special = _stop_special_mode()
 
     current = _RANDOM_CURRENT_GIF
     ok, value = _run_random_cycle(current)
@@ -1668,6 +1817,8 @@ def start_random_gifs(seconds: int = RANDOM_GIF_DEFAULT_SECONDS) -> dict[str, st
     )
     if image_was_running:
         message += " Random image mode stopped."
+    if special_was_running:
+        message += " Special routine stopped."
 
     return {"status": "success", "message": message}
 
@@ -1738,6 +1889,7 @@ def start_random_images(seconds: int = RANDOM_IMAGE_DEFAULT_SECONDS) -> dict[str
         _RANDOM_IMAGE_MODE_SUSPENDED = False
 
     gif_was_running, _previous_gif = _stop_random_mode()
+    special_was_running, _previous_special = _stop_special_mode()
 
     current = _RANDOM_CURRENT_IMAGE
     ok, value = _run_random_image_cycle(current)
@@ -1758,6 +1910,8 @@ def start_random_images(seconds: int = RANDOM_IMAGE_DEFAULT_SECONDS) -> dict[str
     )
     if gif_was_running:
         message += " Random gif mode stopped."
+    if special_was_running:
+        message += " Special routine stopped."
 
     return {"status": "success", "message": message}
 
@@ -1780,3 +1934,223 @@ def stop_random_images() -> dict[str, str]:
         message += f" {current} ({RANDOM_IMAGE_NAME}) remains displayed."
 
     return {"status": "success", "message": message}
+
+
+# --- Special routine (pato-gira) ---
+
+@mcp.resource("cube://special")
+def get_special_status() -> str:
+    """
+    Returns the state of the special routine mode (e.g. pato-gira).
+
+    Reports whether the routine is running (or paused because display is off
+    or suspended while a temporary gif is shown) and which gif is currently
+    displayed, plus the full alternating list.
+    """
+    with _SPECIAL_MODE_LOCK:
+        running = _SPECIAL_MODE_RUNNING
+        suspended = _SPECIAL_MODE_SUSPENDED
+        current = _SPECIAL_CURRENT_GIF
+        routine = _SPECIAL_CURRENT_ROUTINE
+        gifs = list(_SPECIAL_GIFS) if _SPECIAL_GIFS else None
+        interval = _SPECIAL_INTERVAL
+
+    if not running:
+        state = "stopped"
+    elif suspended:
+        state = "running (suspended: temporary gif being shown)"
+    elif _is_cube_display_on():
+        state = "running"
+    else:
+        state = "running (paused: Cube display is off)"
+
+    lines = [f"Special routine: {state}"]
+    if routine:
+        lines.append(f"Routine: {routine}")
+    if gifs:
+        lines.append(f"Gifs: {', '.join(gifs)} (switch every {interval}s)")
+    if current:
+        lines.append(f"Current gif: {current}")
+    else:
+        lines.append("No special gif has been shown yet.")
+    if not routine and not running:
+        available = ", ".join(_list_special_routines()) or "none"
+        lines.append(f"Available routines: {available}")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def start_special_routine(routine: str = "pato-gira", seconds: int = SPECIAL_DEFAULT_SECONDS) -> dict[str, str]:
+    """
+    Starts the special routine (e.g. pato-gira) on the Cube display.
+
+    Clears all files from the Cube's memory, uploads the two gifs from
+    media/special/gifs/<routine> (e.g. pato-gira.gif and pato-gira-rev.gif)
+    and continuously alternates between them every `seconds` (default 60 / 1 min)
+    via a simple background timer/process. Original gifs are uploaded as-is
+    sin restricciones. The first gif is shown before this call returns; a
+    background thread then switches to the opposite gif every interval forever
+    until stop_special_routine is called.
+
+    Args:
+        routine: Name of the routine directory under media/special/gifs
+            (default "pato-gira").
+        seconds: Seconds each gif stays on screen before switching
+            (default 60, clamped to [1, 3600]).
+    """
+    global _SPECIAL_MODE_RUNNING, _SPECIAL_MODE_SUSPENDED, _SPECIAL_CURRENT_GIF, _SPECIAL_CURRENT_ROUTINE, _SPECIAL_GIFS, _SPECIAL_INTERVAL
+
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    routine = routine.strip().strip("/").strip()
+    if not routine:
+        return {"status": "error", "message": "Routine name is required."}
+
+    # Validate routine exists and has gifs
+    routine_dir = SPECIAL_GIF_ROOT / routine
+    if not routine_dir.is_dir():
+        available = ", ".join(_list_special_routines()) or "none"
+        return {"status": "error", "message": f"Routine not found: {routine}. Available: {available}."}
+
+    gif_paths = _list_special_gifs(routine)
+    if not gif_paths:
+        return {"status": "error", "message": f"No .gif files found for routine {routine} in {routine_dir}."}
+
+    # Sort to ensure deterministic order: pato-gira.gif before pato-gira-rev.gif
+    # (alphabetical puts rev first because '-' < '.'), so sort with rev last.
+    gif_paths = sorted(gif_paths, key=lambda p: ("rev" in p.name.lower(), p.name.lower()))
+    gif_names = [p.name for p in gif_paths]
+
+    # Validate dimensions upfront
+    for p in gif_paths:
+        dims = _image_dimensions(p.read_bytes())
+        if dims != IMAGE_REQUIRED_DIMENSIONS:
+            w, h = dims if dims else (0, 0)
+            return {
+                "status": "error",
+                "message": f"Gif must be {IMAGE_REQUIRED_DIMENSIONS[0]}x{IMAGE_REQUIRED_DIMENSIONS[1]} (got {w}x{h}): {p.name}.",
+            }
+
+    clamped = max(SPECIAL_MIN_SECONDS, min(SPECIAL_MAX_SECONDS, seconds))
+
+    with _SPECIAL_MODE_LOCK:
+        if _SPECIAL_MODE_RUNNING:
+            return {
+                "status": "error",
+                "message": "Special routine is already running. Call stop_special_routine first.",
+            }
+        _SPECIAL_MODE_RUNNING = True
+        _SPECIAL_MODE_SUSPENDED = False
+
+    # Stop competing modes before we start clearing/uploading
+    was_random, _prev_r = _stop_random_mode()
+    was_image, _prev_i = _stop_image_mode()
+
+    # Clear cube memory
+    try:
+        files_before = _fetch_cube_files()
+    except Exception as e:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Failed to fetch contents from Cube: {e}"}
+
+    if files_before:
+        try:
+            _clear_cube_contents_request()
+        except Exception as e:
+            with _SPECIAL_MODE_LOCK:
+                _SPECIAL_MODE_RUNNING = False
+            return {"status": "error", "message": f"Failed to clear Cube contents: {e}"}
+        # Verify empty (up to 3 attempts)
+        cleared = False
+        for _ in range(3):
+            try:
+                remaining = _fetch_cube_files()
+            except Exception as e:
+                with _SPECIAL_MODE_LOCK:
+                    _SPECIAL_MODE_RUNNING = False
+                return {"status": "error", "message": f"Failed to verify clear on Cube: {e}"}
+            if not remaining:
+                cleared = True
+                break
+            time.sleep(1)
+        if not cleared:
+            with _SPECIAL_MODE_LOCK:
+                _SPECIAL_MODE_RUNNING = False
+            return {"status": "error", "message": "Clear could not be confirmed: the Cube still lists files."}
+
+    # Upload each gif in the routine (check free space before each) - simple sin restricciones
+    for path in gif_paths:
+        payload = path.read_bytes()
+        rejection = _cube_free_space_rejection(len(payload))
+        if rejection:
+            with _SPECIAL_MODE_LOCK:
+                _SPECIAL_MODE_RUNNING = False
+            return {"status": "error", "message": rejection}
+        try:
+            _upload_cube_image(path.name, payload)
+        except Exception as e:
+            with _SPECIAL_MODE_LOCK:
+                _SPECIAL_MODE_RUNNING = False
+            return {"status": "error", "message": f"Failed to upload {path.name} to Cube: {e}"}
+        try:
+            available = _fetch_cube_gifs()
+        except Exception as e:
+            with _SPECIAL_MODE_LOCK:
+                _SPECIAL_MODE_RUNNING = False
+            return {"status": "error", "message": f"Failed to verify upload of {path.name} on Cube: {e}"}
+        if not _is_in_cube_filelist(path.name, available):
+            with _SPECIAL_MODE_LOCK:
+                _SPECIAL_MODE_RUNNING = False
+            return {
+                "status": "error",
+                "message": f"Upload could not be confirmed: {path.name} is not in the Cube file list.",
+            }
+
+    first_gif = gif_names[0]
+    try:
+        response = _set_cube_gif(first_gif)
+    except Exception as e:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Failed to set gif {first_gif} on Cube: {e}"}
+    if "FAIL" in response.upper():
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Cube refused to set gif {first_gif}. Response: {response}"}
+
+    with _SPECIAL_MODE_LOCK:
+        _SPECIAL_CURRENT_GIF = first_gif
+        _SPECIAL_CURRENT_ROUTINE = routine
+        _SPECIAL_GIFS = gif_names
+        _SPECIAL_INTERVAL = clamped
+
+    threading.Thread(target=_special_loop, args=(clamped, gif_names), daemon=True).start()
+
+    parts = [f"Special routine '{routine}' started: {first_gif} displayed; switching every {clamped}s between {', '.join(gif_names)}."]
+    if was_random:
+        parts.append("Random gif mode stopped.")
+    if was_image:
+        parts.append("Random image mode stopped.")
+    if response:
+        parts.append(f"Device response: {response}")
+    return {"status": "success", "message": " ".join(parts)}
+
+
+@mcp.tool()
+def stop_special_routine() -> dict[str, str]:
+    """
+    Stops the special routine started by start_special_routine.
+
+    The loop stops alternating gifs; whatever was last displayed remains on
+    the Cube.
+    """
+    was_running, current = _stop_special_mode()
+    if not was_running:
+        return {"status": "success", "message": "Special routine is not running."}
+    msg = "Special routine stopped."
+    if current:
+        msg += f" {current} remains displayed."
+    return {"status": "success", "message": msg}

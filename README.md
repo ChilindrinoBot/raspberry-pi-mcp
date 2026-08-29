@@ -5,7 +5,7 @@ A distributed audio management system based on the **Model Context Protocol (MCP
 
 ## 🏗️ Architecture
 The system is split into two main components:
-- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, capture photos/videos from the camera, list the images available on the Cube display, save images into the local media/images pool (resized/padded to 240x240 JPEG), show gallery images and gifs on the Cube permanently, list the contents of the local galleries (images and gifs), and cycle random images and random gifs on the Cube display.
+- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, capture photos/videos from the camera, list the images available on the Cube display, save images into the local media/images pool (resized/padded to 240x240 JPEG), show gallery images and gifs on the Cube permanently, list the contents of the local galleries (images and gifs), cycle random images and random gifs on the Cube display, and run special routines (e.g. `pato-gira` – clears Cube, uploads `media/special/gifs/pato-gira/pato-gira.gif` + `pato-gira-rev.gif` and alternates every 60s via simple timer).
 - **`client/`**: A reference Python client that demonstrates how to send audio files and control commands to the server.
 
 ## 🚀 Quick Start
@@ -132,6 +132,12 @@ python -m client.main get-current-random-gif
 
 # 🛑 Stop cycling random gifs on the Cube (the last random.gif stays displayed)
 python -m client.main stop-random-gifs
+
+# 🦆 Special routine `pato-gira` — clears Cube, uploads 2 gifs from media/special/gifs/pato-gira and loops every 60s (1 min) simple timer
+python -m client.main special --routine pato-gira
+python -m client.main special --routine pato-gira --seconds 60
+python -m client.main special --status   # show special routine status
+python -m client.main special --stop     # stop special routine
 ```
 
 ## 🧪 Testing
@@ -170,6 +176,6 @@ python -m unittest discover tests
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube current gif (/img.json), file listing with sizes (cube://contents), file deletion (/delete?file=), clear all (/set?clear=image), free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, local image saving (media/images, 240x240 JPEG with black padding), permanent gallery image/gif show, gallery listing (gallery://images, gallery://gifs), random image cycling (media/images -> random.jpg) and random gif cycling tools
+│       └── cube.py     # Cube current gif (/img.json), file listing with sizes (cube://contents), file deletion (/delete?file=), clear all (/set?clear=image), free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, local image saving (media/images, 240x240 JPEG with black padding), permanent gallery image/gif show, gallery listing (gallery://images, gallery://gifs), random image cycling (media/images -> random.jpg), random gif cycling and special routine pato-gira (media/special/gifs/pato-gira → 60s timer, cube://special)
 └── tests/              # Integration tests
 ```

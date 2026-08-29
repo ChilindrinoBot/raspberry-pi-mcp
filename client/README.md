@@ -125,6 +125,12 @@ python -m client.main get-current-random-gif
 # 🛑 Stop cycling random gifs on the Cube (the last random.gif stays displayed)
 python -m client.main stop-random-gifs
 
+# 🦆 Special routine `pato-gira` — clears Cube, uploads 2 gifs and loops every 60s (1 min) simple timer
+python -m client.main special --routine pato-gira
+python -m client.main special --routine pato-gira --seconds 60
+python -m client.main special --status
+python -m client.main special --stop
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -165,6 +171,9 @@ from client.cube_client import (
     get_random_gif_status,
     start_random_cube_gifs,
     stop_random_cube_gifs,
+    get_special_status,
+    start_special_routine,
+    stop_special_routine,
 )
 
 async def main():
@@ -334,6 +343,14 @@ async def main():
     # 🛑 Stop cycling random gifs (the last random.gif stays displayed).
     result = await stop_random_cube_gifs()
     print(f"Random gifs stopped: {result}")
+
+    # 🦆 Special routine pato-gira — clears Cube, uploads 2 gifs, loops every 60s (1 min) simple timer
+    result = await start_special_routine("pato-gira", seconds=60)
+    print(f"Special started: {result}")
+    status = await get_special_status()
+    print(f"Special status:\n{status}")
+    result = await stop_special_routine()
+    print(f"Special stopped: {result}")
 
     # Later, stop the playback
     await stop_audio()

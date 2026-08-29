@@ -36,6 +36,9 @@ from .cube_client import (
     stop_random_cube_images,
     list_gallery_images,
     list_gallery_gifs,
+    get_special_status,
+    start_special_routine,
+    stop_special_routine,
 )
 
 
@@ -290,6 +293,16 @@ async def run_cli():
         "get-current-random-image", help="Get which temporary image (random.jpg) is being used"
     )
 
+    # Command 'special' — special routine (e.g. pato-gira): clears cube, uploads
+    # media/special/gifs/<routine> gifs and loops switching every 60s (1 min) via simple timer
+    special_parser = subparsers.add_parser(
+        "special", help="Run special routine (e.g. pato-gira) — clears Cube and loops 2 gifs every 60s (1 min)"
+    )
+    special_parser.add_argument("--routine", default="pato-gira", help="Routine name under media/special/gifs (default: pato-gira)")
+    special_parser.add_argument("--seconds", type=int, default=60, help="Seconds each gif stays before switching (default 60 = 1 min)")
+    special_parser.add_argument("--stop", action="store_true", help="Stop the running special routine instead of starting it")
+    special_parser.add_argument("--status", action="store_true", help="Show special routine status instead of starting it")
+
     args = parser.parse_args()
 
     try:
@@ -453,6 +466,19 @@ async def run_cli():
             print("Fetching gallery gifs...")
             res = await list_gallery_gifs()
             print(f"\n{res}")
+        elif args.command == "special":
+            if args.status:
+                print("Fetching special routine status...")
+                res = await get_special_status()
+                print(f"\n{res}")
+            elif args.stop:
+                print("Stopping special routine...")
+                res = await stop_special_routine()
+                print(f"Server Response: {res}")
+            else:
+                print(f"Starting special routine '{args.routine}' (switch every {args.seconds}s)...")
+                res = await start_special_routine(args.routine, args.seconds)
+                print(f"Server Response: {res}")
         else:
             parser.print_help()
     except BaseException as e:

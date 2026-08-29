@@ -45,6 +45,9 @@ from .display import (
     get_random_gif_status,
     start_random_gifs,
     stop_random_gifs,
+    get_special_status,
+    start_special_routine,
+    stop_special_routine,
 )
 from .image import take_photo
 from .video import record_video
@@ -89,6 +92,9 @@ __all__ = [
     "get_random_gif_status",
     "start_random_gifs",
     "stop_random_gifs",
+    "get_special_status",
+    "start_special_routine",
+    "stop_special_routine",
     "take_photo",
     "record_video",
 ]

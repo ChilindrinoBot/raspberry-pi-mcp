@@ -263,3 +263,32 @@ async def list_gallery_gifs() -> str:
             return "No gallery gif information available."
 
         return result.contents[0].text
+
+
+async def get_special_status() -> str:
+    """Fetches the special routine status (running, current gif) from the server resource."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.read_resource("cube://special")
+
+        if not result.contents:
+            return "No special routine information available for the Cube."
+
+        return result.contents[0].text
+
+
+async def start_special_routine(routine: str = "pato-gira", seconds: int = 60) -> dict[str, str]:
+    """Requests the server to start a special routine (e.g. pato-gira).
+
+    Clears the Cube, uploads the two gifs from media/special/gifs/<routine>
+    and loops switching every `seconds` (default 60 / 1 min) simple timer.
+    """
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool("start_special_routine", {"routine": routine, "seconds": seconds})
+        return result.structured_content
+
+
+async def stop_special_routine() -> dict[str, str]:
+    """Requests the server to stop the special routine."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool("stop_special_routine", {})
+        return result.structured_content
