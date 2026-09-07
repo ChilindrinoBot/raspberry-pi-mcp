@@ -153,9 +153,96 @@ python -m unittest discover tests
 ## 🛠️ Tech Stack
 - **Language:** Python 3.11+
 - **Protocol:** Model Context Protocol (MCP)
-- **Audio Backend:** `ffplay` (FFmpeg)
+- **Audio Backend:** `pactl` (PipeWire/PulseAudio)
 - **Image Validation:** Pillow
 - **Package Management:** `uv` / `pyproject.toml`
+
+## 🐚 Systemd Service Setup (Raspberry Pi)
+
+To run the MCP server automatically on boot, create a systemd service.
+
+### 1. Create the service file
+
+```bash
+sudo nano /etc/systemd/system/mcpserver.service
+```
+
+Paste the following template:
+
+```ini
+[Unit]
+Description=Raspberry Pi MCP Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=YOUR_USERNAME
+WorkingDirectory=/home/YOUR_USERNAME/Workspace/server
+ExecStart=/home/YOUR_USERNAME/.local/bin/uv run python -m server.main
+Restart=always
+RestartSec=5
+
+# Environment
+Environment="PATH=/home/YOUR_USERNAME/.local/bin:/home/YOUR_USERNAME/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PULSE_SERVER=unix:/run/user/$(id -u)/pulse/native"
+
+[Install]
+WantedBy=multi-user.target
+```
+
+> Replace `YOUR_USERNAME` with your actual username.
+
+### 2. Enable and start the service
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable mcpserver
+sudo systemctl start mcpserver
+```
+
+### 3. Useful commands
+
+```bash
+# Check status
+sudo systemctl status mcpserver
+
+# View logs
+sudo journalctl -u mcpserver -f
+
+# Restart after code changes
+sudo systemctl restart mcpserver
+
+# Stop the service
+sudo systemctl stop mcpserver
+```
+
+### 4. Troubleshooting
+
+**Volume control fails with "Connection refused"**
+
+The `PULSE_SERVER` env var is missing or wrong. Verify the socket path:
+```bash
+pactl info | grep "Server String"
+```
+Then update the service file with the correct path and restart.
+
+**Audio not playing**
+
+Ensure `ffplay` is installed:
+```bash
+sudo apt install ffmpeg
+```
+
+**Permission denied on PulseAudio**
+
+Make sure your user has access to PulseAudio:
+```bash
+pactl info
+```
+If this fails, add your user to the `audio` group:
+```bash
+sudo usermod -aG audio YOUR_USERNAME
+```
 
 ## 📁 Project Structure
 ```text

@@ -2,7 +2,9 @@ import subprocess
 import unittest
 from unittest.mock import Mock, patch
 
-from server.audio.speaker import _run_amixer, mute, unmute, set_volume, get_volume, MASTER_CONTROL
+from server.audio.speaker import _run_pactl, _get_default_sink, mute, unmute, set_volume, get_volume
+
+FAKE_SINK = "alsa_output.usb-TestDevice-00.iec958-stereo"
 
 
 def _make_result(returncode: int = 0, stdout: str = "", stderr: str = "") -> Mock:
@@ -13,11 +15,30 @@ def _make_result(returncode: int = 0, stdout: str = "", stderr: str = "") -> Moc
     return result
 
 
-def _get_real_mute_state() -> bool | None:
-    """Query the real system mute state via amixer. Returns True if muted, False if unmuted, None if unknown."""
+def _get_real_sink() -> str | None:
+    """Get the real default sink from the system."""
     try:
         result = subprocess.run(
-            ["amixer", "get", MASTER_CONTROL],
+            ["pactl", "get-default-sink"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (FileNotFoundError, OSError):
+        pass
+    return None
+
+
+def _get_real_mute_state() -> bool | None:
+    """Query the real system mute state via pactl."""
+    sink = _get_real_sink()
+    if not sink:
+        return None
+    try:
+        result = subprocess.run(
+            ["pactl", "get-sink-mute", sink],
             capture_output=True,
             text=True,
             check=False,
@@ -28,20 +49,22 @@ def _get_real_mute_state() -> bool | None:
     if result.returncode != 0:
         return None
 
-    # amixer output contains "[on]" or "[off]" for the mute state.
-    if "[off]" in result.stdout:
+    if "yes" in result.stdout.lower():
         return True
-    if "[on]" in result.stdout:
+    if "no" in result.stdout.lower():
         return False
     return None
 
 
 def _set_real_mute_state(muted: bool) -> None:
-    """Set the real system mute state via amixer."""
-    action = "mute" if muted else "unmute"
+    """Set the real system mute state via pactl."""
+    sink = _get_real_sink()
+    if not sink:
+        return
+    value = "1" if muted else "0"
     try:
         subprocess.run(
-            ["amixer", "set", MASTER_CONTROL, action],
+            ["pactl", "set-sink-mute", sink, value],
             capture_output=True,
             text=True,
             check=False,
@@ -51,10 +74,13 @@ def _set_real_mute_state(muted: bool) -> None:
 
 
 def _get_real_volume_level() -> int | None:
-    """Query the real system volume level via amixer. Returns an int 0-100 or None if unknown."""
+    """Query the real system volume level via pactl."""
+    sink = _get_real_sink()
+    if not sink:
+        return None
     try:
         result = subprocess.run(
-            ["amixer", "get", MASTER_CONTROL],
+            ["pactl", "get-sink-volume", sink],
             capture_output=True,
             text=True,
             check=False,
@@ -66,21 +92,24 @@ def _get_real_volume_level() -> int | None:
         return None
 
     for line in result.stdout.splitlines():
-        if "[" in line and "%]" in line:
+        if "%" in line:
             try:
-                start = line.index("[") + 1
-                end = line.index("%]")
-                return int(line[start:end])
+                idx = line.index("%")
+                start = line.rfind(" ", 0, idx) + 1
+                return int(line[start:idx])
             except ValueError:
                 continue
     return None
 
 
 def _set_real_volume_level(level: int) -> None:
-    """Set the real system volume level via amixer."""
+    """Set the real system volume level via pactl."""
+    sink = _get_real_sink()
+    if not sink:
+        return
     try:
         subprocess.run(
-            ["amixer", "set", MASTER_CONTROL, f"{level}%"],
+            ["pactl", "set-sink-volume", sink, f"{level}%"],
             capture_output=True,
             text=True,
             check=False,
@@ -89,122 +118,139 @@ def _set_real_volume_level(level: int) -> None:
         pass
 
 
+class GetDefaultSinkTests(unittest.TestCase):
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result(stdout="alsa_output.usb-TestDevice-00.iec958-stereo\n"))
+    def test_get_default_sink_success(self, mock_pactl: Mock) -> None:
+        result = _get_default_sink()
+        self.assertEqual(result, "alsa_output.usb-TestDevice-00.iec958-stereo")
+        mock_pactl.assert_called_once_with("get-default-sink")
+
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result(returncode=1, stderr="No sink found"))
+    def test_get_default_sink_no_sink(self, mock_pactl: Mock) -> None:
+        with self.assertRaises(RuntimeError):
+            _get_default_sink()
+
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result(stdout="\n"))
+    def test_get_default_sink_empty_output(self, mock_pactl: Mock) -> None:
+        with self.assertRaises(RuntimeError):
+            _get_default_sink()
+
+
 class MuteTests(unittest.TestCase):
     def setUp(self) -> None:
-        # Capture the real system mute state so we can restore it after the test.
         self._original_muted = _get_real_mute_state()
 
     def tearDown(self) -> None:
-        # Restore the original mute state if we were able to read it.
         if self._original_muted is not None:
             _set_real_mute_state(self._original_muted)
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", return_value=_make_result())
-    def test_mute_success(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result())
+    def test_mute_success(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = mute()
 
         self.assertEqual(result["status"], "muted")
         self.assertEqual(result["message"], "Audio output has been muted.")
-        mock_amixer.assert_called_once_with("set", MASTER_CONTROL, "mute")
-        mock_run.assert_not_called()
+        mock_sink.assert_called_once()
+        mock_pactl.assert_called_once_with("set-sink-mute", FAKE_SINK, "1")
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", return_value=_make_result(returncode=1, stderr="Device not found"))
-    def test_mute_amixer_error(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result(returncode=1, stderr="Device not found"))
+    def test_mute_pactl_error(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = mute()
 
         self.assertEqual(result["status"], "error")
         self.assertIn("Device not found", result["message"])
-        mock_run.assert_not_called()
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", side_effect=RuntimeError("amixer is not installed."))
-    def test_mute_missing_amixer(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", side_effect=RuntimeError("No default audio sink found."))
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result())
+    def test_mute_no_sink(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = mute()
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("amixer is not installed", result["message"])
-        mock_run.assert_not_called()
+        self.assertIn("No default audio sink found", result["message"])
+        mock_pactl.assert_not_called()
+
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", side_effect=RuntimeError("pactl is not installed."))
+    def test_mute_missing_pactl(self, mock_pactl: Mock, mock_sink: Mock) -> None:
+        result = mute()
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("pactl is not installed", result["message"])
 
 
 class UnmuteTests(unittest.TestCase):
     def setUp(self) -> None:
-        # Capture the real system mute state so we can restore it after the test.
         self._original_muted = _get_real_mute_state()
 
     def tearDown(self) -> None:
-        # Restore the original mute state if we were able to read it.
         if self._original_muted is not None:
             _set_real_mute_state(self._original_muted)
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", return_value=_make_result())
-    def test_unmute_success(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result())
+    def test_unmute_success(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = unmute()
 
         self.assertEqual(result["status"], "unmuted")
         self.assertEqual(result["message"], "Audio output has been unmuted.")
-        mock_amixer.assert_called_once_with("set", MASTER_CONTROL, "unmute")
-        mock_run.assert_not_called()
+        mock_sink.assert_called_once()
+        mock_pactl.assert_called_once_with("set-sink-mute", FAKE_SINK, "0")
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", return_value=_make_result(returncode=1, stderr="Device not found"))
-    def test_unmute_amixer_error(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result(returncode=1, stderr="Device not found"))
+    def test_unmute_pactl_error(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = unmute()
 
         self.assertEqual(result["status"], "error")
         self.assertIn("Device not found", result["message"])
-        mock_run.assert_not_called()
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", side_effect=RuntimeError("amixer is not installed."))
-    def test_unmute_missing_amixer(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", side_effect=RuntimeError("No default audio sink found."))
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result())
+    def test_unmute_no_sink(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = unmute()
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("amixer is not installed", result["message"])
-        mock_run.assert_not_called()
+        self.assertIn("No default audio sink found", result["message"])
+        mock_pactl.assert_not_called()
 
 
 class SetVolumeTests(unittest.TestCase):
     def setUp(self) -> None:
-        # Capture the real system volume so we can restore it after the test.
         self._original_level = _get_real_volume_level()
 
     def tearDown(self) -> None:
-        # Restore the original volume level if we were able to read it.
         if self._original_level is not None:
             _set_real_volume_level(self._original_level)
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", return_value=_make_result())
-    def test_set_volume_success(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result())
+    def test_set_volume_success(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = set_volume(75)
 
         self.assertEqual(result["status"], "volume-set")
         self.assertEqual(result["level"], 75)
         self.assertIn("75%", result["message"])
-        mock_amixer.assert_called_once_with("set", MASTER_CONTROL, "75%")
-        mock_run.assert_not_called()
+        mock_sink.assert_called_once()
+        mock_pactl.assert_called_once_with("set-sink-volume", FAKE_SINK, "75%")
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", return_value=_make_result(returncode=1, stderr="Device not found"))
-    def test_set_volume_amixer_error(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result(returncode=1, stderr="Device not found"))
+    def test_set_volume_pactl_error(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = set_volume(50)
 
         self.assertEqual(result["status"], "error")
         self.assertIn("Device not found", result["message"])
-        mock_run.assert_not_called()
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", side_effect=RuntimeError("amixer is not installed."))
-    def test_set_volume_missing_amixer(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", side_effect=RuntimeError("No default audio sink found."))
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result())
+    def test_set_volume_no_sink(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = set_volume(50)
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("amixer is not installed", result["message"])
-        mock_run.assert_not_called()
+        self.assertIn("No default audio sink found", result["message"])
+        mock_pactl.assert_not_called()
 
     def test_set_volume_below_range(self) -> None:
         result = set_volume(-5)
@@ -221,59 +267,52 @@ class SetVolumeTests(unittest.TestCase):
 
 class GetVolumeTests(unittest.TestCase):
     def setUp(self) -> None:
-        # Capture the real system volume so we can restore it after the test.
         self._original_level = _get_real_volume_level()
 
     def tearDown(self) -> None:
-        # Restore the original volume level if we were able to read it.
         if self._original_level is not None:
             _set_real_volume_level(self._original_level)
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result(stdout="Simple mixer control 'Master'\n  Capabilities: pvolume pswitch\n  Playback channels: Front Left - Front Right\n  Limits: 0 - 100\n  Mono:\n  Front Left: Playback 40 [40%] [on]\n  Front Right: Playback 40 [40%] [on]\n"))
-    @patch("server.audio.speaker._run_amixer", return_value=_make_result(stdout="Front Left: Playback 40 [40%] [on]\nFront Right: Playback 40 [40%] [on]\n"))
-    def test_get_volume_success(self, mock_amixer: Mock, mock_run: Mock) -> None:
-        # The real amixer call is via _get_volume_level -> _run_amixer.
-        # Patch _run_amixer for the internal call and subprocess.run for safety.
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result(stdout="Volume: front-left: 47191 / 72% / -8.06 dB, front-right: 47191 / 72% / -8.06 dB"))
+    def test_get_volume_success(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = get_volume()
 
-        self.assertEqual(result, "Current volume: 40%")
-        mock_amixer.assert_called_once_with("get", MASTER_CONTROL)
-        mock_run.assert_not_called()
+        self.assertEqual(result, "Current volume: 72%")
+        mock_sink.assert_called_once()
+        mock_pactl.assert_called_once_with("get-sink-volume", FAKE_SINK)
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", return_value=_make_result(returncode=1, stderr="Device not found"))
-    def test_get_volume_amixer_error(self, mock_amixer: Mock, mock_run: Mock) -> None:
-        result = get_volume()
-
-        self.assertEqual(result, "Could not determine the current volume level.")
-        mock_amixer.assert_called_once_with("get", MASTER_CONTROL)
-        mock_run.assert_not_called()
-
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", side_effect=RuntimeError("amixer is not installed."))
-    def test_get_volume_missing_amixer(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result(returncode=1, stderr="No such sink"))
+    def test_get_volume_pactl_error(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = get_volume()
 
         self.assertEqual(result, "Could not determine the current volume level.")
-        mock_amixer.assert_called_once_with("get", MASTER_CONTROL)
-        mock_run.assert_not_called()
 
-    @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    @patch("server.audio.speaker._run_amixer", return_value=_make_result(stdout="Simple mixer control 'Master'\n  Capabilities: pvolume pswitch\n"))
-    def test_get_volume_unparseable_output(self, mock_amixer: Mock, mock_run: Mock) -> None:
+    @patch("server.audio.speaker._get_default_sink", side_effect=RuntimeError("No default audio sink found."))
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result())
+    def test_get_volume_no_sink(self, mock_pactl: Mock, mock_sink: Mock) -> None:
+        result = get_volume()
+
+        self.assertEqual(result, "Could not determine the current volume level.")
+        mock_pactl.assert_not_called()
+
+    @patch("server.audio.speaker._get_default_sink", return_value=FAKE_SINK)
+    @patch("server.audio.speaker._run_pactl", return_value=_make_result(stdout="No volume info available"))
+    def test_get_volume_unparseable_output(self, mock_pactl: Mock, mock_sink: Mock) -> None:
         result = get_volume()
 
         self.assertEqual(result, "Could not determine the current volume level.")
 
 
-class RunAmixerTests(unittest.TestCase):
-    @patch("server.audio.speaker.shutil.which", return_value="/usr/bin/amixer")
+class RunPactlTests(unittest.TestCase):
+    @patch("server.audio.speaker.shutil.which", return_value="/usr/bin/pactl")
     @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    def test_run_amixer_uses_amixer_path(self, mock_run: Mock, mock_which: Mock) -> None:
-        _run_amixer("set", "Master", "mute")
+    def test_run_pactl_uses_pactl_path(self, mock_run: Mock, mock_which: Mock) -> None:
+        _run_pactl("set-sink-mute", "test-sink", "1")
 
         mock_run.assert_called_once_with(
-            ["/usr/bin/amixer", "set", "Master", "mute"],
+            ["/usr/bin/pactl", "set-sink-mute", "test-sink", "1"],
             capture_output=True,
             text=True,
             check=False,
@@ -281,9 +320,9 @@ class RunAmixerTests(unittest.TestCase):
 
     @patch("server.audio.speaker.shutil.which", return_value=None)
     @patch("server.audio.speaker.subprocess.run", return_value=_make_result())
-    def test_run_amixer_raises_when_not_installed(self, mock_run: Mock, mock_which: Mock) -> None:
+    def test_run_pactl_raises_when_not_installed(self, mock_run: Mock, mock_which: Mock) -> None:
         with self.assertRaises(RuntimeError):
-            _run_amixer("set", "Master", "mute")
+            _run_pactl("set-sink-mute", "test-sink", "1")
         mock_run.assert_not_called()
 
 
