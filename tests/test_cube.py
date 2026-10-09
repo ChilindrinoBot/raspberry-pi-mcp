@@ -811,9 +811,10 @@ class UploadCubeImageHelperTests(unittest.TestCase):
 
         mock_post.assert_called_once()
         self.assertIn("/doUpload?dir=/image", mock_post.call_args[0][0])
-        filename, content = mock_post.call_args[1]["files"]["image"]
+        filename, content, content_type = mock_post.call_args[1]["files"]["image"]
         self.assertEqual(filename, "tmp.gif")
         self.assertEqual(content, b"gifdata")
+        self.assertEqual(content_type, "image/gif")
 
     @patch("server.display.cube.httpx.post")
     def test_jpg_posts_in_file_field(self, mock_post: Mock) -> None:

@@ -131,6 +131,11 @@ python -m client.main special --routine pato-gira --seconds 60
 python -m client.main special --status
 python -m client.main special --stop
 
+# 🐱 Oiia special routine — default oiia.gif on screen + random preloaded gif from media/special/gifs/oiia/random every 60s for 10s, batch renewed every 10 min (0 = never)
+python -m client.main special --routine oiia --every 60 --duration 10 --renew 600
+python -m client.main special --routine oiia --status
+python -m client.main special --routine oiia --stop
+
 # 🛑 Stop the server from playing audio
 python -m client.main stop
 ```
@@ -351,6 +356,10 @@ async def main():
     print(f"Special status:\n{status}")
     result = await stop_special_routine()
     print(f"Special stopped: {result}")
+
+    # 🐱 Oiia special routine — default oiia.gif on screen, random gif every 60s for 10s each, batch renewed every 10 min (same unified special mode).
+    result = await start_special_routine("oiia", every=60, duration=10, renew=600)
+    print(f"Oiia started: {result}")
 
     # Later, stop the playback
     await stop_audio()

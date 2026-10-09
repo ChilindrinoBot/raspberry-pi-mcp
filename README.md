@@ -5,7 +5,7 @@ A distributed audio management system based on the **Model Context Protocol (MCP
 
 ## 🏗️ Architecture
 The system is split into two main components:
-- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, capture photos/videos from the camera, list the images available on the Cube display, save images into the local media/images pool (resized/padded to 240x240 JPEG), show gallery images and gifs on the Cube permanently, list the contents of the local galleries (images and gifs), cycle random images and random gifs on the Cube display, and run special routines (e.g. `pato-gira` – clears Cube, uploads `media/special/gifs/pato-gira/pato-gira.gif` + `pato-gira-rev.gif` and alternates every 60s via simple timer).
+- **`server/`**: The MCP Server. It runs on the machine connected to the speakers. It exposes tools to play audio bytes, stop playback, manage volume, control the microphone, play notification sounds, capture photos/videos from the camera, list the images available on the Cube display, save images into the local media/images pool (resized/padded to 240x240 JPEG), show gallery images and gifs on the Cube permanently, list the contents of the local galleries (images and gifs), cycle random images and random gifs on the Cube display, and run special routines (e.g. `pato-gira` – clears Cube, uploads `media/special/gifs/pato-gira/pato-gira.gif` + `pato-gira-rev.gif` and alternates every 60s via simple timer; `oiia` – clears Cube, keeps `media/special/gifs/oiia/oiia.gif` on screen, shows a random preloaded gif from `media/special/gifs/oiia/random` every 60s for 10s each and renews the batch every 10 min).
 - **`client/`**: A reference Python client that demonstrates how to send audio files and control commands to the server.
 
 ## 🚀 Quick Start
@@ -138,6 +138,11 @@ python -m client.main special --routine pato-gira
 python -m client.main special --routine pato-gira --seconds 60
 python -m client.main special --status   # show special routine status
 python -m client.main special --stop     # stop special routine
+
+# 🐱 Oiia special routine — clears Cube, keeps default oiia.gif on screen, shows a random preloaded gif from media/special/gifs/oiia/random every 60s for 10s, renews the batch every 10 min (0 = never)
+python -m client.main special --routine oiia --every 60 --duration 10 --renew 600
+python -m client.main special --routine oiia --status   # show oiia routine status
+python -m client.main special --routine oiia --stop     # stop oiia routine
 ```
 
 ## 🧪 Testing
@@ -263,6 +268,6 @@ sudo usermod -aG audio YOUR_USERNAME
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube current gif (/img.json), file listing with sizes (cube://contents), file deletion (/delete?file=), clear all (/set?clear=image), free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, local image saving (media/images, 240x240 JPEG with black padding), permanent gallery image/gif show, gallery listing (gallery://images, gallery://gifs), random image cycling (media/images -> random.jpg), random gif cycling and special routine pato-gira (media/special/gifs/pato-gira → 60s timer, cube://special)
+│       └── cube.py     # Cube current gif (/img.json), file listing with sizes (cube://contents), file deletion (/delete?file=), clear all (/set?clear=image), free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, local image saving (media/images, 240x240 JPEG with black padding), permanent gallery image/gif show, gallery listing (gallery://images, gallery://gifs), random image cycling (media/images -> random.jpg), random gif cycling, special routines pato-gira (media/special/gifs/pato-gira → 60s timer) and oiia (default oiia.gif + randoms from media/special/gifs/oiia/random → every/duration/renew timers) via cube://special
 └── tests/              # Integration tests
 ```

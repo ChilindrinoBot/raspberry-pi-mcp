@@ -39,7 +39,10 @@ class StartSpecialRoutineClientTests(unittest.TestCase):
         mock_client.call_tool.return_value = type("Obj", (), {"structured_content": {"status": "success", "message": "started"}})()
         MockClient.return_value = ctx
         asyncio.run(start_special_routine("pato-gira"))
-        mock_client.call_tool.assert_called_once_with("start_special_routine", {"routine": "pato-gira", "seconds": 60})
+        mock_client.call_tool.assert_called_once_with(
+            "start_special_routine",
+            {"routine": "pato-gira", "seconds": 60, "every": 60, "duration": 10, "renew": 600},
+        )
 
     @patch("client.cube_client.Client")
     def test_calls_with_custom_seconds(self, MockClient) -> None:
@@ -47,7 +50,21 @@ class StartSpecialRoutineClientTests(unittest.TestCase):
         mock_client.call_tool.return_value = type("Obj", (), {"structured_content": {"status": "success", "message": "started"}})()
         MockClient.return_value = ctx
         asyncio.run(start_special_routine("pato-gira", seconds=10))
-        mock_client.call_tool.assert_called_once_with("start_special_routine", {"routine": "pato-gira", "seconds": 10})
+        mock_client.call_tool.assert_called_once_with(
+            "start_special_routine",
+            {"routine": "pato-gira", "seconds": 10, "every": 60, "duration": 10, "renew": 600},
+        )
+
+    @patch("client.cube_client.Client")
+    def test_calls_tool_with_oiia_timers(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type("Obj", (), {"structured_content": {"status": "success", "message": "oiia started"}})()
+        MockClient.return_value = ctx
+        asyncio.run(start_special_routine("oiia", every=60, duration=10, renew=600))
+        mock_client.call_tool.assert_called_once_with(
+            "start_special_routine",
+            {"routine": "oiia", "seconds": 60, "every": 60, "duration": 10, "renew": 600},
+        )
 
 
 class StopSpecialRoutineClientTests(unittest.TestCase):

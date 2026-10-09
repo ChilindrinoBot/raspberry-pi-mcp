@@ -139,7 +139,30 @@ _SPECIAL_CURRENT_GIF: str | None = None
 _SPECIAL_CURRENT_ROUTINE: str | None = None
 _SPECIAL_GIFS: list[str] | None = None
 _SPECIAL_INTERVAL: int | None = None
+# Oiia-only timers under the unified special state: for routine="oiia",
+# _SPECIAL_GIFS holds the preloaded random batch, _SPECIAL_INTERVAL is `every`,
+# and these hold `duration` / `renew`. Generic routines leave them None.
+_SPECIAL_OIIA_DURATION: int | None = None
+_SPECIAL_OIIA_RENEW: int | None = None
 _SPECIAL_MODE_LOCK: Final[threading.Lock] = threading.Lock()
+
+# Oiia timer defaults, declared early so start_special_routine (defined before
+# the oiia section) can accept and default them when routine="oiia" delegates
+# to the dedicated oiia tools. The remaining oiia constants/state live in the
+# oiia section below.
+OIIA_DEFAULT_EVERY: Final[int] = 60
+OIIA_MIN_EVERY: Final[int] = 10
+OIIA_MAX_EVERY: Final[int] = 3600
+OIIA_DEFAULT_DURATION: Final[int] = 10
+OIIA_MIN_DURATION: Final[int] = 3
+OIIA_MAX_DURATION: Final[int] = 600
+OIIA_DEFAULT_RENEW: Final[int] = 600
+OIIA_MIN_RENEW: Final[int] = 0
+OIIA_MAX_RENEW: Final[int] = 86400
+# Seconds between Cube display-state checks while the oiia loop counts down.
+# The firmware starves GIF playback under constant HTTP chatter, so the loop
+# stays mostly silent (stop/suspend still react within 1s).
+OIIA_DISPLAY_POLL_SECONDS: Final[int] = 15
 
 
 def _fetch_cube_files() -> list[tuple[str, int]]:
@@ -573,17 +596,21 @@ def _upload_cube_image(name: str, data: bytes) -> None:
 
     Mirrors the device's web uploader: gifs are sent in the "image" field while
     jpg/jpeg files are sent in the "file" field, always targeting the /image dir.
+    The part content type is sent explicitly (image/gif or image/jpeg, like a
+    browser would) instead of httpx's application/octet-stream default.
     Transport-level failures (read timeouts, dropped connections) are retried
     once after a short pause, because the device can stall while writing the
     previous upload to flash; HTTP error responses are not retried.
     """
-    field = "image" if name.lower().endswith(".gif") else "file"
+    is_gif = name.lower().endswith(".gif")
+    field = "image" if is_gif else "file"
+    content_type = "image/gif" if is_gif else "image/jpeg"
     url = f"{CUBE_BASE_URL}/doUpload?dir={CUBE_IMAGE_DIR}"
     timeout = httpx.Timeout(UPLOAD_TIMEOUT_SECONDS, connect=UPLOAD_CONNECT_TIMEOUT_SECONDS)
 
     for attempt in range(1, UPLOAD_ATTEMPTS + 1):
         try:
-            response = httpx.post(url, files={field: (name, data)}, timeout=timeout)
+            response = httpx.post(url, files={field: (name, data, content_type)}, timeout=timeout)
             response.raise_for_status()
             return
         except httpx.HTTPStatusError:
@@ -1462,9 +1489,19 @@ def _resume_special_mode() -> None:
         _SPECIAL_MODE_SUSPENDED = False
 
 
-def _sleep_interruptible_for_special(total_seconds: int) -> None:
-    """Sleep interruptibly for the special routine (respects suspend/display off)."""
-    _wait_between_cycles(total_seconds, _is_special_mode_running, _is_special_mode_suspended)
+def _sleep_interruptible_for_special(total_seconds: int, display_poll_seconds: int = 1) -> None:
+    """Sleep interruptibly for the special routine (respects suspend/display off).
+
+    The display state is re-checked every `display_poll_seconds` (default every
+    second); the oiia flow passes a wider interval because constant HTTP
+    polling starves GIF playback on the Cube.
+    """
+    _wait_between_cycles(
+        total_seconds,
+        _is_special_mode_running,
+        _is_special_mode_suspended,
+        display_poll_seconds,
+    )
 
 
 def _special_loop(seconds: int, gifs: list[str]) -> None:
@@ -1521,21 +1558,34 @@ def _is_cube_display_on() -> bool:
         return False
 
 
-def _wait_between_cycles(total_seconds: int, is_running, is_suspended) -> None:
+def _wait_between_cycles(
+    total_seconds: int, is_running, is_suspended, display_poll_seconds: int = 1
+) -> None:
     """Count total_seconds down in 1s steps, pausing whenever needed.
 
     The countdown only advances while the mode keeps running, it is not
     suspended and the Cube display is on; otherwise the wait keeps polling
     every second without counting down, resuming the cycle afterwards.
+    The display state (an HTTP query) is only re-checked every
+    `display_poll_seconds`: chatty modes can space it out so constant HTTP
+    traffic doesn't starve the Cube's GIF renderer. Stop/suspend still react
+    within 1s regardless of this interval.
     """
+    display_poll_seconds = max(1, display_poll_seconds)
     remaining = total_seconds
+    since_poll = display_poll_seconds
+    display_on = True
     while remaining > 0 and is_running():
         time.sleep(1)
         if not is_running():
             break
         if is_suspended():
             continue
-        if _is_cube_display_on():
+        since_poll += 1
+        if since_poll >= display_poll_seconds:
+            since_poll = 0
+            display_on = _is_cube_display_on()
+        if display_on:
             remaining -= 1
 
 
@@ -1941,11 +1991,13 @@ def stop_random_images() -> dict[str, str]:
 @mcp.resource("cube://special")
 def get_special_status() -> str:
     """
-    Returns the state of the special routine mode (e.g. pato-gira).
+    Returns the state of the special routine mode (e.g. pato-gira, oiia).
 
     Reports whether the routine is running (or paused because display is off
     or suspended while a temporary gif is shown) and which gif is currently
-    displayed, plus the full alternating list.
+    displayed. Generic routines show the full alternating list; oiia shows its
+    default gif, the preloaded random batch and the every/duration/renew
+    timers.
     """
     with _SPECIAL_MODE_LOCK:
         running = _SPECIAL_MODE_RUNNING
@@ -1954,6 +2006,8 @@ def get_special_status() -> str:
         routine = _SPECIAL_CURRENT_ROUTINE
         gifs = list(_SPECIAL_GIFS) if _SPECIAL_GIFS else None
         interval = _SPECIAL_INTERVAL
+        oiia_duration = _SPECIAL_OIIA_DURATION
+        oiia_renew = _SPECIAL_OIIA_RENEW
 
     if not running:
         state = "stopped"
@@ -1967,7 +2021,17 @@ def get_special_status() -> str:
     lines = [f"Special routine: {state}"]
     if routine:
         lines.append(f"Routine: {routine}")
-    if gifs:
+    if routine == "oiia":
+        lines.append(f"Default gif: {OIIA_DEFAULT_GIF_NAME}")
+        renew_note = f", renew every {oiia_renew}s" if oiia_renew else ", auto-renew disabled"
+        if gifs:
+            lines.append(
+                f"Randoms ({len(gifs)} preloaded): {', '.join(gifs)} "
+                f"(random pick every {interval}s for {oiia_duration}s each{renew_note})"
+            )
+        else:
+            lines.append(f"No random gifs preloaded ({renew_note}).")
+    elif gifs:
         lines.append(f"Gifs: {', '.join(gifs)} (switch every {interval}s)")
     if current:
         lines.append(f"Current gif: {current}")
@@ -1981,23 +2045,43 @@ def get_special_status() -> str:
 
 
 @mcp.tool()
-def start_special_routine(routine: str = "pato-gira", seconds: int = SPECIAL_DEFAULT_SECONDS) -> dict[str, str]:
+def start_special_routine(
+    routine: str,
+    seconds: int = SPECIAL_DEFAULT_SECONDS,
+    every: int = OIIA_DEFAULT_EVERY,
+    duration: int = OIIA_DEFAULT_DURATION,
+    renew: int = OIIA_DEFAULT_RENEW,
+) -> dict[str, str]:
     """
-    Starts the special routine (e.g. pato-gira) on the Cube display.
+    Starts a special routine (pato-gira, oiia, ...) on the Cube display.
 
-    Clears all files from the Cube's memory, uploads the two gifs from
-    media/special/gifs/<routine> (e.g. pato-gira.gif and pato-gira-rev.gif)
-    and continuously alternates between them every `seconds` (default 60 / 1 min)
-    via a simple background timer/process. Original gifs are uploaded as-is
-    sin restricciones. The first gif is shown before this call returns; a
-    background thread then switches to the opposite gif every interval forever
-    until stop_special_routine is called.
+    For generic routines (e.g. pato-gira) it clears all files from the Cube's
+    memory, uploads the two gifs from media/special/gifs/<routine> (e.g.
+    pato-gira.gif and pato-gira-rev.gif) and continuously alternates between
+    them every `seconds` (default 60 / 1 min) via a simple background
+    timer/process. Original gifs are uploaded as-is sin restricciones. The
+    first gif is shown before this call returns; a background thread then
+    switches to the opposite gif every interval forever until
+    stop_special_routine is called.
+
+    The `oiia` routine keeps media/special/gifs/oiia/oiia.gif on screen and
+    shows randomly picked gifs from media/special/gifs/oiia/random every
+    `every` seconds for `duration` seconds each (repeats allowed), renewing
+    the preloaded batch every `renew` seconds. `seconds` is ignored for
+    `oiia`.
 
     Args:
         routine: Name of the routine directory under media/special/gifs
-            (default "pato-gira").
+            (required, e.g. "pato-gira" or "oiia").
         seconds: Seconds each gif stays on screen before switching
-            (default 60, clamped to [1, 3600]).
+            (default 60, clamped to [1, 3600]). Ignored for `oiia`.
+        every: Only for `oiia`: seconds between random gif appearances
+            (default 60, clamped to [10, 3600]).
+        duration: Only for `oiia`: seconds each random gif stays on screen
+            (default 10, clamped to [3, 600]). Must be less than `every`.
+        renew: Only for `oiia`: seconds between preloaded batch renewals
+            (default 600 = 10 min, clamped to [0, 86400]). 0 disables
+            auto-renew.
     """
     global _SPECIAL_MODE_RUNNING, _SPECIAL_MODE_SUSPENDED, _SPECIAL_CURRENT_GIF, _SPECIAL_CURRENT_ROUTINE, _SPECIAL_GIFS, _SPECIAL_INTERVAL
 
@@ -2007,6 +2091,9 @@ def start_special_routine(routine: str = "pato-gira", seconds: int = SPECIAL_DEF
     routine = routine.strip().strip("/").strip()
     if not routine:
         return {"status": "error", "message": "Routine name is required."}
+
+    if routine == "oiia":
+        return _start_special_oiia(every=every, duration=duration, renew=renew)
 
     # Validate routine exists and has gifs
     routine_dir = SPECIAL_GIF_ROOT / routine
@@ -2142,10 +2229,10 @@ def start_special_routine(routine: str = "pato-gira", seconds: int = SPECIAL_DEF
 @mcp.tool()
 def stop_special_routine() -> dict[str, str]:
     """
-    Stops the special routine started by start_special_routine.
+    Stops the special routine started by start_special_routine
+    (generic ones and oiia share this unified mode).
 
-    The loop stops alternating gifs; whatever was last displayed remains on
-    the Cube.
+    The loop stops; whatever was last displayed remains on the Cube.
     """
     was_running, current = _stop_special_mode()
     if not was_running:
@@ -2154,3 +2241,341 @@ def stop_special_routine() -> dict[str, str]:
     if current:
         msg += f" {current} remains displayed."
     return {"status": "success", "message": msg}
+
+
+# --- Oiia routine ---
+
+# Directory layout:
+#   media/special/gifs/oiia/oiia.gif          default gif, always on screen
+#   media/special/gifs/oiia/random/*.gif      pool of random interruption gifs
+# The Cube memory is cleared first, the default gif is uploaded and displayed,
+# then random gifs from the pool are uploaded (in random order, packing smaller
+# ones) until no more fit on the device. The loop shows the default gif and,
+# every `every` seconds, displays a randomly picked preloaded gif for
+# `duration` seconds before going back to the default (repeats allowed).
+# Independently, every `renew` seconds the preloaded batch is replaced with
+# fresh random gifs (0 disables auto-renew). Refills only run while the default
+# gif is on screen: uploads/deletes never change the displayed image, so a
+# refill never interrupts a random gif being shown, and spacing refills out
+# keeps flash I/O from overloading the device.
+OIIA_DIR: Final[Path] = SPECIAL_GIF_ROOT / "oiia"
+OIIA_DEFAULT_GIF_NAME: Final[str] = "oiia.gif"
+OIIA_RANDOM_DIR: Final[Path] = OIIA_DIR / "random"
+# (Oiia timer defaults live with the special constants above so
+# start_special_routine can use them for routine="oiia". Oiia runs on the
+# unified special state: _SPECIAL_GIFS holds the preloaded random batch,
+# _SPECIAL_INTERVAL is `every`, _SPECIAL_OIIA_DURATION/_SPECIAL_OIIA_RENEW the
+# remaining timers.)
+
+
+def _list_oiia_random_gifs() -> list[Path]:
+    """List the .gif files in the oiia random pool (sorted)."""
+    if not OIIA_RANDOM_DIR.is_dir():
+        return []
+    return sorted(
+        p for p in OIIA_RANDOM_DIR.iterdir() if p.is_file() and p.suffix.lower() == ".gif"
+    )
+
+
+def _oiia_fill_randoms(prefer_exclude: set[str] | None = None) -> list[str]:
+    """Upload random oiia gifs to the Cube until no more fit.
+
+    Gifs are picked from media/special/gifs/oiia/random in random order;
+    names in `prefer_exclude` (usually the previous batch) are tried last so
+    refills bring fresh gifs when the pool is bigger than the Cube memory.
+    Uploading only writes to flash and never changes the displayed gif, so the
+    default gif stays on screen while this runs. Gifs that would break the
+    free-space reserve are skipped so smaller ones still pack the memory;
+    only a free-space check failure aborts the fill. Returns the uploaded
+    names in order.
+    """
+    pool = _list_oiia_random_gifs()
+    random.shuffle(pool)
+    if prefer_exclude:
+        pool = [p for p in pool if p.name not in prefer_exclude] + [
+            p for p in pool if p.name in prefer_exclude
+        ]
+    uploaded: list[str] = []
+    for path in pool:
+        if not _is_special_mode_running():
+            break
+        try:
+            payload = path.read_bytes()
+        except Exception:
+            continue
+        if _image_dimensions(payload) != IMAGE_REQUIRED_DIMENSIONS:
+            continue
+        rejection = _cube_free_space_rejection(len(payload))
+        if rejection:
+            if rejection.startswith("Failed to check free space"):
+                break
+            continue
+        try:
+            _upload_cube_image(path.name, payload)
+        except Exception:
+            continue
+        try:
+            available = _fetch_cube_gifs()
+        except Exception:
+            continue
+        if _is_in_cube_filelist(path.name, available):
+            uploaded.append(path.name)
+    return uploaded
+
+
+def _oiia_refresh_randoms() -> list[str]:
+    """Replace the preloaded random batch with a fresh one.
+
+    Must only be called while the default gif is displayed (never in the
+    middle of a random gif): old random gifs are deleted from the Cube, then a
+    new random batch is uploaded until the memory is full. Returns the new
+    batch (possibly empty when nothing could be uploaded).
+    """
+    global _SPECIAL_GIFS
+    with _SPECIAL_MODE_LOCK:
+        old = list(_SPECIAL_GIFS) if _SPECIAL_GIFS else []
+    for name in old:
+        if not _is_special_mode_running():
+            return old
+        try:
+            _delete_cube_file(name)
+        except Exception:
+            continue
+    new_batch = _oiia_fill_randoms(prefer_exclude=set(old))
+    with _SPECIAL_MODE_LOCK:
+        _SPECIAL_GIFS = new_batch
+    return new_batch
+
+
+def _oiia_loop(every: int, duration: int, renew: int) -> None:
+    """Show the default oiia gif with momentary random interruptions.
+
+    Every `every` seconds a randomly picked preloaded gif is displayed for
+    `duration` seconds (repeats allowed), then the default gif is restored.
+    Independently, every `renew` seconds (0 disables it) the preloaded batch
+    is replaced with fresh random gifs. Refills only run while the default gif
+    is on screen, never in the middle of a random gif. Runs in a background
+    thread until stop_special_routine is called; state lives in the unified
+    special mode.
+    """
+    global _SPECIAL_CURRENT_GIF
+    last_refresh = time.monotonic()
+    try:
+        while _is_special_mode_running():
+            _sleep_interruptible_for_special(every, OIIA_DISPLAY_POLL_SECONDS)
+            if not _is_special_mode_running():
+                break
+            if renew > 0 and time.monotonic() - last_refresh >= renew:
+                _oiia_refresh_randoms()
+                last_refresh = time.monotonic()
+                if not _is_special_mode_running():
+                    break
+            with _SPECIAL_MODE_LOCK:
+                gifs = list(_SPECIAL_GIFS) if _SPECIAL_GIFS else []
+            if not gifs:
+                gifs = _oiia_refresh_randoms()
+                last_refresh = time.monotonic()
+                if not gifs:
+                    continue
+            next_gif = random.choice(gifs)
+            try:
+                response = _set_cube_gif(next_gif)
+            except Exception:
+                continue
+            if "FAIL" in response.upper():
+                continue
+            with _SPECIAL_MODE_LOCK:
+                _SPECIAL_CURRENT_GIF = next_gif
+            _sleep_interruptible_for_special(duration, OIIA_DISPLAY_POLL_SECONDS)
+            if not _is_special_mode_running():
+                break
+            try:
+                back = _set_cube_gif(OIIA_DEFAULT_GIF_NAME)
+                if "FAIL" not in back.upper():
+                    with _SPECIAL_MODE_LOCK:
+                        _SPECIAL_CURRENT_GIF = OIIA_DEFAULT_GIF_NAME
+            except Exception:
+                pass
+    finally:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+
+
+def _start_special_oiia(
+    every: int = OIIA_DEFAULT_EVERY,
+    duration: int = OIIA_DEFAULT_DURATION,
+    renew: int = OIIA_DEFAULT_RENEW,
+) -> dict[str, str]:
+    """
+    Oiia flow for start_special_routine(routine="oiia") on unified special state.
+
+    Clears all files from the Cube's memory, uploads the default gif
+    media/special/gifs/oiia/oiia.gif (240x240) and displays it, then uploads
+    random gifs from media/special/gifs/oiia/random in random order, packing
+    smaller ones until no more fit on the device. Every `every` seconds a
+    randomly picked preloaded gif is shown for `duration` seconds (repeats
+    allowed) and then the default gif is restored. Independently, every
+    `renew` seconds the preloaded batch is replaced with fresh random gifs
+    while the default stays on screen (uploads/deletes never interrupt the
+    display, so refills never happen in the middle of a random gif and never
+    overload the device with back-to-back flash I/O).
+
+    Args:
+        every: Seconds between random gif appearances
+            (default 60, clamped to [10, 3600]).
+        duration: Seconds each random gif stays on screen before the default
+            gif is restored (default 10, clamped to [3, 600]). Must be less
+            than `every`.
+        renew: Seconds between preloaded batch renewals
+            (default 600 = 10 min, clamped to [0, 86400]). 0 disables
+            auto-renew: the initial batch is kept until stopped.
+    """
+    global _SPECIAL_MODE_RUNNING, _SPECIAL_MODE_SUSPENDED, _SPECIAL_CURRENT_GIF, _SPECIAL_CURRENT_ROUTINE, _SPECIAL_GIFS, _SPECIAL_INTERVAL, _SPECIAL_OIIA_DURATION, _SPECIAL_OIIA_RENEW
+
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    clamped_every = max(OIIA_MIN_EVERY, min(OIIA_MAX_EVERY, every))
+    clamped_duration = max(OIIA_MIN_DURATION, min(OIIA_MAX_DURATION, duration))
+    clamped_renew = max(OIIA_MIN_RENEW, min(OIIA_MAX_RENEW, renew))
+    if clamped_duration >= clamped_every:
+        return {
+            "status": "error",
+            "message": f"Invalid timers: duration ({clamped_duration}s) must be less than every ({clamped_every}s).",
+        }
+
+    with _SPECIAL_MODE_LOCK:
+        if _SPECIAL_MODE_RUNNING:
+            return {
+                "status": "error",
+                "message": "Special routine is already running. Call stop_special_routine first.",
+            }
+        _SPECIAL_MODE_RUNNING = True
+        _SPECIAL_MODE_SUSPENDED = False
+
+    was_random, _prev_r = _stop_random_mode()
+    was_image, _prev_i = _stop_image_mode()
+
+    default_path = OIIA_DIR / OIIA_DEFAULT_GIF_NAME
+    if not default_path.is_file():
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Default oiia gif not found: {default_path}."}
+
+    try:
+        default_payload = default_path.read_bytes()
+    except Exception as e:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Failed to read default oiia gif: {e}"}
+
+    dims = _image_dimensions(default_payload)
+    if dims != IMAGE_REQUIRED_DIMENSIONS:
+        w, h = dims if dims else (0, 0)
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {
+            "status": "error",
+            "message": f"Default oiia gif must be {IMAGE_REQUIRED_DIMENSIONS[0]}x{IMAGE_REQUIRED_DIMENSIONS[1]} (got {w}x{h}).",
+        }
+
+    try:
+        files_before = _fetch_cube_files()
+    except Exception as e:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Failed to fetch contents from Cube: {e}"}
+
+    if files_before:
+        try:
+            _clear_cube_contents_request()
+        except Exception as e:
+            with _SPECIAL_MODE_LOCK:
+                _SPECIAL_MODE_RUNNING = False
+            return {"status": "error", "message": f"Failed to clear Cube contents: {e}"}
+        cleared = False
+        for _ in range(3):
+            try:
+                remaining = _fetch_cube_files()
+            except Exception as e:
+                with _SPECIAL_MODE_LOCK:
+                    _SPECIAL_MODE_RUNNING = False
+                return {"status": "error", "message": f"Failed to verify clear on Cube: {e}"}
+            if not remaining:
+                cleared = True
+                break
+            time.sleep(1)
+        if not cleared:
+            with _SPECIAL_MODE_LOCK:
+                _SPECIAL_MODE_RUNNING = False
+            return {"status": "error", "message": "Clear could not be confirmed: the Cube still lists files."}
+
+    rejection = _cube_free_space_rejection(len(default_payload))
+    if rejection:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": rejection}
+    try:
+        _upload_cube_image(OIIA_DEFAULT_GIF_NAME, default_payload)
+    except Exception as e:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Failed to upload {OIIA_DEFAULT_GIF_NAME} to Cube: {e}"}
+    try:
+        available = _fetch_cube_gifs()
+    except Exception as e:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Failed to verify upload of {OIIA_DEFAULT_GIF_NAME} on Cube: {e}"}
+    if not _is_in_cube_filelist(OIIA_DEFAULT_GIF_NAME, available):
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {
+            "status": "error",
+            "message": f"Upload could not be confirmed: {OIIA_DEFAULT_GIF_NAME} is not in the Cube file list.",
+        }
+
+    try:
+        response = _set_cube_gif(OIIA_DEFAULT_GIF_NAME)
+    except Exception as e:
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Failed to set gif {OIIA_DEFAULT_GIF_NAME} on Cube: {e}"}
+    if "FAIL" in response.upper():
+        with _SPECIAL_MODE_LOCK:
+            _SPECIAL_MODE_RUNNING = False
+        return {"status": "error", "message": f"Cube refused to set gif {OIIA_DEFAULT_GIF_NAME}. Response: {response}"}
+
+    preloaded = _oiia_fill_randoms()
+    if not _is_special_mode_running():
+        return {"status": "error", "message": "Special routine was stopped while preloading random gifs."}
+
+    with _SPECIAL_MODE_LOCK:
+        _SPECIAL_CURRENT_GIF = OIIA_DEFAULT_GIF_NAME
+        _SPECIAL_CURRENT_ROUTINE = "oiia"
+        _SPECIAL_GIFS = preloaded
+        _SPECIAL_INTERVAL = clamped_every
+        _SPECIAL_OIIA_DURATION = clamped_duration
+        _SPECIAL_OIIA_RENEW = clamped_renew
+
+    threading.Thread(target=_oiia_loop, args=(clamped_every, clamped_duration, clamped_renew), daemon=True).start()
+
+    parts = [
+        f"Oiia routine started: {OIIA_DEFAULT_GIF_NAME} displayed; "
+        f"a random gif shows every {clamped_every}s for {clamped_duration}s."
+    ]
+    if preloaded:
+        parts.append(f"Preloaded {len(preloaded)} random gif(s): {', '.join(preloaded)}.")
+    else:
+        parts.append("No random gifs could be preloaded (only the default gif will show).")
+    if clamped_renew:
+        parts.append(f"Random batch renews every {clamped_renew}s.")
+    else:
+        parts.append("Auto-renew disabled: the initial batch is kept until stopped.")
+    if was_random:
+        parts.append("Random gif mode stopped.")
+    if was_image:
+        parts.append("Random image mode stopped.")
+    if response:
+        parts.append(f"Device response: {response}")
+    return {"status": "success", "message": " ".join(parts)}

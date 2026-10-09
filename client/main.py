@@ -293,15 +293,19 @@ async def run_cli():
         "get-current-random-image", help="Get which temporary image (random.jpg) is being used"
     )
 
-    # Command 'special' — special routine (e.g. pato-gira): clears cube, uploads
-    # media/special/gifs/<routine> gifs and loops switching every 60s (1 min) via simple timer
+    # Command 'special' — special routines: generic ones (e.g. pato-gira) clear
+    # the cube, upload media/special/gifs/<routine> gifs and loop switching
     special_parser = subparsers.add_parser(
-        "special", help="Run special routine (e.g. pato-gira) — clears Cube and loops 2 gifs every 60s (1 min)"
+        "special", help="Run special routine (pato-gira, oiia)"
     )
-    special_parser.add_argument("--routine", default="pato-gira", help="Routine name under media/special/gifs (default: pato-gira)")
-    special_parser.add_argument("--seconds", type=int, default=60, help="Seconds each gif stays before switching (default 60 = 1 min)")
+    special_parser.add_argument("--routine", required=True, help="Routine name under media/special/gifs (required, e.g. pato-gira or oiia)")
+    special_parser.add_argument("--seconds", type=int, default=60, help="Seconds each gif stays before switching - generic routines only (default 60 = 1 min)")
     special_parser.add_argument("--stop", action="store_true", help="Stop the running special routine instead of starting it")
     special_parser.add_argument("--status", action="store_true", help="Show special routine status instead of starting it")
+    # Arguments only for OIIA
+    special_parser.add_argument("--every", type=int, default=60, help="Oiia only: seconds between random gif appearances (default 60, min 10, max 3600)")
+    special_parser.add_argument("--duration", type=int, default=10, help="Oiia only: seconds each random gif stays before restoring the default (default 10, min 3, max 600, must be < every)")
+    special_parser.add_argument("--renew", type=int, default=600, help="Oiia only: seconds between preloaded batch renewals (default 600 = 10 min, max 86400; 0 disables auto-renew)")
 
     args = parser.parse_args()
 
@@ -474,6 +478,10 @@ async def run_cli():
             elif args.stop:
                 print("Stopping special routine...")
                 res = await stop_special_routine()
+                print(f"Server Response: {res}")
+            elif args.routine.strip().strip("/") == "oiia":
+                print(f"Starting oiia routine (random every {args.every}s for {args.duration}s, renew every {args.renew}s)...")
+                res = await start_special_routine(args.routine, args.seconds, args.every, args.duration, args.renew)
                 print(f"Server Response: {res}")
             else:
                 print(f"Starting special routine '{args.routine}' (switch every {args.seconds}s)...")

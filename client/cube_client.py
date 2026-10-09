@@ -276,14 +276,27 @@ async def get_special_status() -> str:
         return result.contents[0].text
 
 
-async def start_special_routine(routine: str = "pato-gira", seconds: int = 60) -> dict[str, str]:
-    """Requests the server to start a special routine (e.g. pato-gira).
+async def start_special_routine(
+    routine: str,
+    seconds: int = 60,
+    every: int = 60,
+    duration: int = 10,
+    renew: int = 600,
+) -> dict[str, str]:
+    """Requests the server to start a special routine (routine is required).
 
-    Clears the Cube, uploads the two gifs from media/special/gifs/<routine>
-    and loops switching every `seconds` (default 60 / 1 min) simple timer.
+    Generic routines (e.g. pato-gira) clear the Cube, upload the two gifs from
+    media/special/gifs/<routine> and loop switching every `seconds` (default
+    60 / 1 min) simple timer. The oiia routine instead keeps oiia.gif on screen
+    and shows randomly picked gifs from media/special/gifs/oiia/random every
+    `every` seconds for `duration` seconds each, renewing the preloaded batch
+    every `renew` seconds (0 disables auto-renew).
     """
     async with Client(AuthTransport(SERVER_URL)) as client:
-        result = await client.call_tool("start_special_routine", {"routine": routine, "seconds": seconds})
+        result = await client.call_tool(
+            "start_special_routine",
+            {"routine": routine, "seconds": seconds, "every": every, "duration": duration, "renew": renew},
+        )
         return result.structured_content
 
 
