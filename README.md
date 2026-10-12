@@ -272,6 +272,6 @@ sudo usermod -aG audio YOUR_USERNAME
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube.py     # Cube current gif (/img.json), file listing with sizes (cube://contents), file deletion (/delete?file=), clear all (/set?clear=image), free space, gif-set (/image/<name>), brightness (/set?brt=, /brt.json), display on/off, image upload (/doUpload), temporary gif, local image saving (media/images, 240x240 JPEG with black padding), permanent gallery image/gif show, gallery listing (gallery://images, gallery://gifs), random image cycling (media/images -> random.jpg), random gif cycling, special routines pato-gira (media/special/gifs/pato-gira → 60s timer) and oiia (default oiia.gif + randoms from media/special/gifs/oiia/random → every/duration/renew timers) via cube://special
+│       └── cube/         # Display package: config (env/constants), http (device calls), images (validation/convert), state (mode flags/locks), files (list/delete/clear/upload/space), display (gif/brightness/power), gallery (pools/show/list), temp (temporary gif ± audio), random_modes (random.gif/jpg cycling), special (pato-gira 60s timer + oiia default/randoms/renew) via cube://special
 └── tests/              # Integration tests
 ```
