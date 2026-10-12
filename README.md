@@ -272,6 +272,6 @@ sudo usermod -aG audio YOUR_USERNAME
 │   ├── image/          # Photo capture tools
 │   ├── video/          # Video recording tools
 │   └── display/        # Cube display image and storage info
-│       └── cube/         # Display package: config (env/constants), http (device calls), images (validation/convert), state (mode flags/locks), files (list/delete/clear/upload/space), display (gif/brightness/power), gallery (pools/show/list), temp (temporary gif ± audio), random_modes (random.gif/jpg cycling), special (pato-gira 60s timer + oiia default/randoms/renew) via cube://special
+│       └── cube/         # Display package: config (env/constants), http (device calls), images (validation/convert), state (mode flags/locks), files (list/delete/clear/upload/space), display (gif/brightness/power), gallery (pools/show/list), temp (temporary gif ± audio), random_modes (random.gif/jpg cycling), special/ (core dispatcher + pato_gira.py duck + oiia.py cat, one file per future mode) via cube://special
 └── tests/              # Integration tests
 ```

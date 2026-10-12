@@ -188,7 +188,7 @@ class StartSpecialRoutineTests(SpecialModeStateTestCase):
     @patch("server.display.cube.http._clear_cube_contents_request", return_value="OK")
     @patch("server.display.cube.http._fetch_cube_files", side_effect=[[("old.gif", 100)], []])
     @patch("server.display.cube.images._image_dimensions", return_value=(240, 240))
-    @patch("server.display.cube.special._list_special_gifs")
+    @patch("server.display.cube.special.pato_gira._list_special_gifs")
     @patch("server.display.cube.config.SPECIAL_GIF_ROOT")
     def test_success_with_default_60s(self, mock_root, mock_list, mock_dims, mock_files, mock_clear, mock_space, mock_upload, mock_gifs, mock_set, mock_thread):
         # setup routine dir mock
@@ -202,7 +202,7 @@ class StartSpecialRoutineTests(SpecialModeStateTestCase):
         with patch.object(cube_module.config, "SPECIAL_GIF_ROOT", Path(tempfile.gettempdir())):
             with patch.object(cube_module.config, "CUBE_BASE_URL", "http://fake"):
                 # need to mock _list_special_gifs to return our tmp files directly via patch
-                with patch("server.display.cube.special._list_special_gifs", return_value=[tmp / "pato-gira.gif", tmp / "pato-gira-rev.gif"]):
+                with patch("server.display.cube.special.pato_gira._list_special_gifs", return_value=[tmp / "pato-gira.gif", tmp / "pato-gira-rev.gif"]):
                     with patch("server.display.cube.config.SPECIAL_GIF_ROOT", Path(tempfile.gettempdir())):
                         # re-mock existence check
                         with patch("pathlib.Path.is_dir", return_value=True):
@@ -217,7 +217,7 @@ class StartSpecialRoutineTests(SpecialModeStateTestCase):
         import shutil
         shutil.rmtree(tmp, ignore_errors=True)
 
-    @patch("server.display.cube.special._list_special_gifs", return_value=[])
+    @patch("server.display.cube.special.pato_gira._list_special_gifs", return_value=[])
     def test_returns_error_when_no_gifs(self, mock_list: Mock) -> None:
         with patch.object(cube_module.config, "CUBE_BASE_URL", "http://fake"):
             with patch("pathlib.Path.is_dir", return_value=True):
@@ -239,7 +239,7 @@ class StartSpecialRoutineTests(SpecialModeStateTestCase):
         try:
             with patch.object(cube_module.config, "CUBE_BASE_URL", "http://fake"):
                 with patch("pathlib.Path.is_dir", return_value=True):
-                    with patch("server.display.cube.special._list_special_gifs", return_value=[tmp / "a.gif"]):
+                    with patch("server.display.cube.special.pato_gira._list_special_gifs", return_value=[tmp / "a.gif"]):
                         with patch("server.display.cube.images._image_dimensions", return_value=(240, 240)):
                             result = start_special_routine("pato-gira")
                             self.assertEqual(result["status"], "error")
@@ -249,7 +249,7 @@ class StartSpecialRoutineTests(SpecialModeStateTestCase):
             cube_module.state._SPECIAL_MODE_RUNNING = False
 
     @patch("server.display.cube.http._fetch_cube_files", side_effect=ConnectionRefusedError("refused"))
-    @patch("server.display.cube.special._list_special_gifs")
+    @patch("server.display.cube.special.pato_gira._list_special_gifs")
     def test_handles_fetch_before_clear_failure(self, mock_list: Mock, mock_files: Mock) -> None:
         import tempfile
         tmp = Path(tempfile.mkdtemp())
@@ -288,7 +288,7 @@ class StartSpecialOiiaTests(SpecialModeStateTestCase):
     @patch("server.display.cube.http._clear_cube_contents_request", return_value="OK")
     @patch("server.display.cube.http._fetch_cube_files", side_effect=[[("old.gif", 100)], []])
     @patch("server.display.cube.images._image_dimensions", return_value=(240, 240))
-    @patch("server.display.cube.special._oiia_fill_randoms", return_value=["001.gif", "002.gif"])
+    @patch("server.display.cube.special.oiia._oiia_fill_randoms", return_value=["001.gif", "002.gif"])
     def test_special_oiia_starts_on_special_state(
         self, mock_fill, mock_dims, mock_files, mock_clear, mock_space,
         mock_upload, mock_gifs, mock_set, mock_thread,
@@ -296,7 +296,7 @@ class StartSpecialOiiaTests(SpecialModeStateTestCase):
         import shutil
         tmp = self._make_oiia_dir()
         try:
-            with patch.object(cube_module.special, "OIIA_DIR", tmp):
+            with patch.object(cube_module.special.oiia, "OIIA_DIR", tmp):
                 with patch.object(cube_module.config, "CUBE_BASE_URL", "http://fake"):
                     result = start_special_routine("oiia", every=60, duration=10, renew=600)
             self.assertEqual(result["status"], "success")
@@ -334,7 +334,7 @@ class StartSpecialOiiaTests(SpecialModeStateTestCase):
         import tempfile, shutil
         tmp = Path(tempfile.mkdtemp())
         try:
-            with patch.object(cube_module.special, "OIIA_DIR", tmp):
+            with patch.object(cube_module.special.oiia, "OIIA_DIR", tmp):
                 with patch.object(cube_module.config, "CUBE_BASE_URL", "http://fake"):
                     result = start_special_routine("oiia")
             self.assertEqual(result["status"], "error")
@@ -522,12 +522,12 @@ class ListOiiaRandomGifsTests(unittest.TestCase):
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def test_lists_only_gifs_sorted(self) -> None:
-        with patch.object(cube_module.special, "OIIA_RANDOM_DIR", self._tmpdir / "random"):
+        with patch.object(cube_module.special.oiia, "OIIA_RANDOM_DIR", self._tmpdir / "random"):
             gifs = _list_oiia_random_gifs()
         self.assertEqual([p.name for p in gifs], ["001.gif", "002.gif"])
 
     def test_returns_empty_when_dir_missing(self) -> None:
-        with patch.object(cube_module.special, "OIIA_RANDOM_DIR", self._tmpdir / "nope"):
+        with patch.object(cube_module.special.oiia, "OIIA_RANDOM_DIR", self._tmpdir / "nope"):
             self.assertEqual(_list_oiia_random_gifs(), [])
 
 
@@ -536,7 +536,7 @@ class OiiaFillTests(SpecialModeStateTestCase):
     @patch("server.display.cube.http._upload_cube_image")
     @patch("server.display.cube.images._cube_free_space_rejection", side_effect=[None, "full"])
     @patch("server.display.cube.images._image_dimensions", return_value=(240, 240))
-    @patch("server.display.cube.special.random.shuffle", side_effect=lambda items: None)
+    @patch("server.display.cube.special.oiia.random.shuffle", side_effect=lambda items: None)
     def test_fill_stops_when_cube_full(
         self, mock_shuffle, mock_dims, mock_space, mock_upload, mock_gifs
     ) -> None:
@@ -547,7 +547,7 @@ class OiiaFillTests(SpecialModeStateTestCase):
         paths = [tmp / "a.gif", tmp / "b.gif"]
         cube_module.state._SPECIAL_MODE_RUNNING = True
         try:
-            with patch("server.display.cube.special._list_oiia_random_gifs", return_value=list(paths)):
+            with patch("server.display.cube.special.oiia._list_oiia_random_gifs", return_value=list(paths)):
                 uploaded = _oiia_fill_randoms()
             self.assertEqual(uploaded, ["a.gif"])
             mock_upload.assert_called_once()
@@ -558,7 +558,7 @@ class OiiaFillTests(SpecialModeStateTestCase):
     @patch("server.display.cube.http._upload_cube_image")
     @patch("server.display.cube.images._cube_free_space_rejection", side_effect=["too big", None])
     @patch("server.display.cube.images._image_dimensions", return_value=(240, 240))
-    @patch("server.display.cube.special.random.shuffle", side_effect=lambda items: None)
+    @patch("server.display.cube.special.oiia.random.shuffle", side_effect=lambda items: None)
     def test_fill_skips_unfit_gif_and_packs_smaller(
         self, mock_shuffle, mock_dims, mock_space, mock_upload, mock_gifs
     ) -> None:
@@ -569,7 +569,7 @@ class OiiaFillTests(SpecialModeStateTestCase):
         paths = [tmp / "a.gif", tmp / "b.gif"]
         cube_module.state._SPECIAL_MODE_RUNNING = True
         try:
-            with patch("server.display.cube.special._list_oiia_random_gifs", return_value=list(paths)):
+            with patch("server.display.cube.special.oiia._list_oiia_random_gifs", return_value=list(paths)):
                 uploaded = _oiia_fill_randoms()
             self.assertEqual(uploaded, ["b.gif"])
             mock_upload.assert_called_once()
@@ -577,7 +577,7 @@ class OiiaFillTests(SpecialModeStateTestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
     @patch("server.display.cube.http._delete_cube_file")
-    @patch("server.display.cube.special._oiia_fill_randoms", return_value=["n1.gif"])
+    @patch("server.display.cube.special.oiia._oiia_fill_randoms", return_value=["n1.gif"])
     def test_refresh_deletes_old_and_swaps_batch(self, mock_fill, mock_delete) -> None:
         cube_module.state._SPECIAL_MODE_RUNNING = True
         cube_module.state._SPECIAL_GIFS = ["o1.gif", "o2.gif"]
@@ -593,8 +593,8 @@ class OiiaFillTests(SpecialModeStateTestCase):
 
 
 class OiiaLoopTests(SpecialModeStateTestCase):
-    @patch("server.display.cube.special.random.choice", return_value="r2.gif")
-    @patch("server.display.cube.special._oiia_refresh_randoms")
+    @patch("server.display.cube.special.oiia.random.choice", return_value="r2.gif")
+    @patch("server.display.cube.special.oiia._oiia_refresh_randoms")
     @patch("server.display.cube.state._is_cube_display_on", return_value=True)
     @patch("server.display.cube.state.time.sleep")
     @patch("server.display.cube.http._set_cube_gif", return_value="OK")
@@ -622,7 +622,7 @@ class OiiaLoopTests(SpecialModeStateTestCase):
         self.assertEqual(cube_module.state._SPECIAL_CURRENT_GIF, OIIA_DEFAULT_GIF_NAME)
 
     @patch("server.display.cube.state.time.monotonic", side_effect=[0, 10000, 10000])
-    @patch("server.display.cube.special._oiia_refresh_randoms")
+    @patch("server.display.cube.special.oiia._oiia_refresh_randoms")
     @patch("server.display.cube.state._is_cube_display_on", return_value=True)
     @patch("server.display.cube.state.time.sleep")
     @patch("server.display.cube.http._set_cube_gif", return_value="OK")
