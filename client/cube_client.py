@@ -140,6 +140,45 @@ async def show_temporary_gif(file_path: str, seconds: int = 5) -> dict[str, str]
         return result.structured_content
 
 
+async def show_temporary_gif_with_audio(
+    file_path: str,
+    audio_path: str,
+    seconds: int | None = None,
+) -> dict[str, str]:
+    """Shows a local image temporarily on the Cube display and plays an audio.
+
+    Gif/jpg images must be exactly 240x240; any other format is converted
+    server-side to a 240x240 JPEG. The image is uploaded as tmp.gif/tmp.jpg,
+    displayed, and only then the audio starts (previous audio is stopped
+    first, then a short pause lets the Cube finish switching frames) so both
+    stay in sync. The audio file is required (any format ffplay understands,
+    10 MB max). With an explicit `seconds` the previous gif is restored after
+    that time (max 30), unless it is shorter than the audio — then the image
+    lasts until 1 second after the audio finishes (reported back); otherwise
+    it is restored 1 second after the audio finishes.
+    """
+    path = Path(file_path.strip())
+    data = path.read_bytes()
+    encoded = _encode_image(data)
+
+    audio_file = Path(audio_path.strip())
+    audio_bytes = audio_file.read_bytes()
+    audio_name = audio_file.name
+
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool(
+            "show_temporary_gif_with_audio",
+            {
+                "data": encoded,
+                "filename": path.name,
+                "audio_data": base64.b64encode(audio_bytes).decode(),
+                "audio_name": audio_name,
+                "seconds": seconds,
+            },
+        )
+        return result.structured_content
+
+
 async def save_image_in_gallery(file_path: str, name: str) -> dict[str, str]:
     """Saves a local image into the server's media/images pool for the Cube.
 

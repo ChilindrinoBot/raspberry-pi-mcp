@@ -28,6 +28,7 @@ from .cube_client import (
     show_gallery_image,
     show_gallery_gif,
     show_temporary_gif,
+    show_temporary_gif_with_audio,
     get_random_gif_status,
     start_random_cube_gifs,
     stop_random_cube_gifs,
@@ -203,6 +204,26 @@ async def run_cli():
         type=int,
         default=5,
         help="Seconds to show the image before restoring the previous gif (default 5, max 30)",
+    )
+
+    # Command 'show-cube-gif-with-audio' — like show-cube-gif plus a synced
+    # audio: the previous audio is stopped first and the new one starts only
+    # after the temporary image is verified on the Cube and displayed.
+    cube_temp_audio_parser = subparsers.add_parser(
+        "show-cube-gif-with-audio",
+        help="Show an image temporarily on the Cube display with a synced audio (previous audio is stopped first)",
+    )
+    cube_temp_audio_parser.add_argument("--file", required=True, help="Local path of the gif or jpg/jpeg image to show")
+    cube_temp_audio_parser.add_argument(
+        "--audio",
+        required=True,
+        help="Local path of the audio to play (any ffplay format, 10 MB max)",
+    )
+    cube_temp_audio_parser.add_argument(
+        "--seconds",
+        type=int,
+        default=None,
+        help="Seconds to show the image before restoring the previous gif (max 30; when omitted, restores 1s after the audio finishes; shorter values than the audio are ignored with a notice)",
     )
 
     # Command 'save-image-in-gallery'
@@ -425,6 +446,10 @@ async def run_cli():
         elif args.command == "show-cube-gif":
             print(f"Showing {args.file} on the Cube for {args.seconds}s...")
             res = await show_temporary_gif(args.file, args.seconds)
+            print(f"Server Response: {res}")
+        elif args.command == "show-cube-gif-with-audio":
+            print(f"Showing {args.file} on the Cube with {args.audio}...")
+            res = await show_temporary_gif_with_audio(args.file, args.audio, seconds=args.seconds)
             print(f"Server Response: {res}")
         elif args.command == "save-image-in-gallery":
             print(f"Saving {args.file} as {args.name}.jpg (240x240 JPEG)...")

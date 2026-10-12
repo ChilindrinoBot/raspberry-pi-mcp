@@ -51,6 +51,32 @@ def _build_player_command() -> list[str]:
     raise RuntimeError("ffplay is not installed. Please run: sudo apt install ffmpeg")
 
 
+def _probe_audio_duration(audio_bytes: bytes) -> float | None:
+    """Return the duration of audio bytes in seconds, or None if unknown.
+
+    Probes via ffprobe (ships with the required ffmpeg package) reading from
+    stdin. Any failure (missing binary, timeout, unparseable output) yields
+    None so callers can fall back to duration-agnostic behavior.
+    """
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe or not audio_bytes:
+        return None
+    try:
+        completed = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", "-"],
+            input=audio_bytes,
+            capture_output=True,
+            timeout=15,
+        )
+    except Exception:
+        return None
+    try:
+        return float(completed.stdout.decode().strip())
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
 def _is_ffplay_running() -> bool:
     """Return True if any ffplay process started by this server is still alive."""
     return audio_manager.is_ffplay_running()

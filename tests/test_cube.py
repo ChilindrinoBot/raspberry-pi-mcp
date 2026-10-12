@@ -41,6 +41,7 @@ from server.display.cube import (
     show_gallery_image,
     show_gallery_gif,
     show_temporary_gif,
+    show_temporary_gif_with_audio,
     list_gallery_images,
     list_gallery_gifs,
     _restore_previous_gif,
@@ -1932,6 +1933,208 @@ class ShowTemporaryGifTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("Cube refused to display temporary gif", result["message"])
         mock_thread_cls.assert_not_called()
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+
+
+class ShowTemporaryGifWithAudioTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_running = cube_module._TEMP_GIF_RUNNING
+        cube_module._TEMP_GIF_RUNNING = False
+
+    def tearDown(self) -> None:
+        cube_module._TEMP_GIF_RUNNING = self._original_running
+
+    def _encoded(self, data: bytes) -> str:
+        return base64.b64encode(data).decode()
+
+    @patch("server.display.cube._probe_audio_duration", return_value=None)
+    @patch("server.display.cube.time.sleep")
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    @patch("server.display.cube._play_audio_bytes_async")
+    @patch("server.display.cube.stop_audio", return_value={"status": "stopped", "message": "idle"})
+    @patch("server.display.cube._is_ffplay_running", return_value=False)
+    def test_shows_tmp_and_plays_audio(
+        self, mock_running: Mock, mock_stop: Mock, mock_play: Mock,
+        mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock,
+        mock_sleep: Mock, mock_probe: Mock,
+    ) -> None:
+        result = show_temporary_gif_with_audio(self._encoded(b"gifdata"), "tmp.gif", self._encoded(b"audiodata"), seconds=5)
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("tmp.gif is now displayed", result["message"])
+        self.assertIn("test.gif will be restored automatically after 5 seconds", result["message"])
+        mock_stop.assert_called_once()
+        mock_sleep.assert_called_once_with(4)
+        mock_play.assert_called_once()
+        played = mock_play.call_args[0][0]
+        self.assertEqual(played, b"audiodata")
+        from unittest.mock import ANY
+        mock_thread_cls.assert_called_once_with(
+            target=cube_module._restore_temp_gif_with_audio,
+            args=("test.gif", ANY, 5, False, False, False),
+            daemon=True,
+        )
+        self.assertTrue(cube_module._TEMP_GIF_RUNNING)
+
+    @patch("server.display.cube._probe_audio_duration", return_value=None)
+    @patch("server.display.cube.time.sleep")
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    @patch("server.display.cube._play_audio_bytes_async")
+    @patch("server.display.cube.stop_audio", return_value={"status": "stopped", "message": "idle"})
+    @patch("server.display.cube._is_ffplay_running", return_value=True)
+    def test_stops_previous_audio_first(
+        self, mock_running: Mock, mock_stop: Mock, mock_play: Mock,
+        mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock,
+        mock_sleep: Mock, mock_probe: Mock,
+    ) -> None:
+        result = show_temporary_gif_with_audio(self._encoded(b"gifdata"), "tmp.gif", self._encoded(b"audiodata"), seconds=5)
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("Previous audio stopped.", result["message"])
+        mock_stop.assert_called_once()
+        mock_play.assert_called_once()
+
+    @patch("server.display.cube._probe_audio_duration", return_value=None)
+    @patch("server.display.cube.time.sleep")
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    @patch("server.display.cube._play_audio_bytes_async")
+    @patch("server.display.cube.stop_audio", return_value={"status": "stopped", "message": "idle"})
+    @patch("server.display.cube._is_ffplay_running", return_value=False)
+    def test_defaults_to_restore_after_audio(
+        self, mock_running: Mock, mock_stop: Mock, mock_play: Mock,
+        mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock,
+        mock_sleep: Mock, mock_probe: Mock,
+    ) -> None:
+        result = show_temporary_gif_with_audio(self._encoded(b"gifdata"), "tmp.gif", self._encoded(b"audiodata"))
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("1 second after the audio finishes", result["message"])
+        from unittest.mock import ANY
+        mock_thread_cls.assert_called_once_with(
+            target=cube_module._restore_temp_gif_with_audio,
+            args=("test.gif", ANY, None, False, False, False),
+            daemon=True,
+        )
+
+    @patch("server.display.cube.time.sleep")
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    @patch("server.display.cube._play_audio_bytes_async")
+    @patch("server.display.cube.stop_audio", return_value={"status": "stopped", "message": "idle"})
+    @patch("server.display.cube._is_ffplay_running", return_value=False)
+    @patch("server.display.cube._probe_audio_duration", return_value=30.0)
+    def test_short_seconds_ignored_with_notice(
+        self, mock_probe: Mock, mock_running: Mock, mock_stop: Mock, mock_play: Mock,
+        mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock,
+        mock_sleep: Mock,
+    ) -> None:
+        result = show_temporary_gif_with_audio(self._encoded(b"gifdata"), "tmp.gif", self._encoded(b"audiodata"), seconds=5)
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("shorter than the audio (~30s)", result["message"])
+        self.assertIn("will be ignored", result["message"])
+        from unittest.mock import ANY
+        mock_thread_cls.assert_called_once_with(
+            target=cube_module._restore_temp_gif_with_audio,
+            args=("test.gif", ANY, 5, False, False, False),
+            daemon=True,
+        )
+        self.assertTrue(cube_module._TEMP_GIF_RUNNING)
+
+    @patch("server.display.cube.time.sleep")
+    @patch("server.display.cube.threading.Thread")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.upload_cube_image", return_value={"status": "success", "message": "uploaded"})
+    @patch("server.display.cube._fetch_cube_current_gif", return_value="/image/test.gif")
+    @patch("server.display.cube._play_audio_bytes_async")
+    @patch("server.display.cube.stop_audio", return_value={"status": "stopped", "message": "idle"})
+    @patch("server.display.cube._is_ffplay_running", return_value=False)
+    @patch("server.display.cube._probe_audio_duration", return_value=3.0)
+    def test_long_seconds_kept_without_notice(
+        self, mock_probe: Mock, mock_running: Mock, mock_stop: Mock, mock_play: Mock,
+        mock_current: Mock, mock_upload: Mock, mock_set: Mock, mock_thread_cls: Mock,
+        mock_sleep: Mock,
+    ) -> None:
+        result = show_temporary_gif_with_audio(self._encoded(b"gifdata"), "tmp.gif", self._encoded(b"audiodata"), seconds=10)
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("restored automatically after 10 seconds", result["message"])
+        self.assertNotIn("ignored", result["message"])
+
+    def test_rejects_when_audio_missing(self) -> None:
+        result = show_temporary_gif_with_audio(self._encoded(b"gifdata"), "tmp.gif", "")
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Audio data is required", result["message"])
+
+    def test_rejects_invalid_audio_base64(self) -> None:
+        result = show_temporary_gif_with_audio(self._encoded(b"gifdata"), "tmp.gif", "!!!not-base64!!!")
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Failed to decode audio", result["message"])
+
+    def test_rejects_when_busy(self) -> None:
+        cube_module._TEMP_GIF_RUNNING = True
+        result = show_temporary_gif_with_audio(self._encoded(b"gifdata"), "tmp.gif", self._encoded(b"audiodata"))
+        self.assertEqual(result["status"], "error")
+        self.assertIn("already being shown", result["message"])
+
+
+class RestoreTempGifWithAudioTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._original_running = cube_module._TEMP_GIF_RUNNING
+        cube_module._TEMP_GIF_RUNNING = True
+
+    def tearDown(self) -> None:
+        cube_module._TEMP_GIF_RUNNING = self._original_running
+
+    @patch("server.display.cube._resume_special_mode")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.time.sleep")
+    @patch("server.display.cube._is_ffplay_running", side_effect=[True, False])
+    def test_restores_after_audio_end(
+        self, mock_running: Mock, mock_sleep: Mock, mock_set: Mock, mock_resume: Mock
+    ) -> None:
+        import time
+        from server.display.cube import _restore_temp_gif_with_audio
+        _restore_temp_gif_with_audio("old.gif", time.monotonic(), None, resume_special=True)
+        mock_set.assert_called_once_with("old.gif")
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+        mock_resume.assert_called_once()
+
+    @patch("server.display.cube._resume_special_mode")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.time.sleep")
+    @patch("server.display.cube._is_ffplay_running", return_value=True)
+    def test_gives_up_after_max_wait(
+        self, mock_running: Mock, mock_sleep: Mock, mock_set: Mock, mock_resume: Mock
+    ) -> None:
+        import time
+        from server.display.cube import _restore_temp_gif_with_audio
+        _restore_temp_gif_with_audio("old.gif", time.monotonic(), None, resume_special=True)
+        mock_set.assert_called_once_with("old.gif")
+        self.assertFalse(cube_module._TEMP_GIF_RUNNING)
+
+    @patch("server.display.cube._resume_special_mode")
+    @patch("server.display.cube._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.time.sleep")
+    @patch("server.display.cube._is_ffplay_running", side_effect=[True, False])
+    def test_long_seconds_win_over_audio_end(
+        self, mock_running: Mock, mock_sleep: Mock, mock_set: Mock, mock_resume: Mock
+    ) -> None:
+        import time
+        from server.display.cube import _restore_temp_gif_with_audio
+        _restore_temp_gif_with_audio("old.gif", time.monotonic(), 30, resume_special=True)
+        mock_set.assert_called_once_with("old.gif")
         self.assertFalse(cube_module._TEMP_GIF_RUNNING)
 
 

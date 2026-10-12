@@ -18,6 +18,12 @@ from dotenv import load_dotenv
 from PIL import Image, ImageOps
 
 from .. import mcp
+from ..audio.play import _build_player_command
+from ..audio.play import _decode_audio_payload
+from ..audio.play import _is_ffplay_running
+from ..audio.play import _play_audio_bytes_async
+from ..audio.play import _probe_audio_duration
+from ..audio.play import stop_audio
 
 # Absolute paths based on workspace structure
 ENV_PATH: Final[Path] = Path(__file__).resolve().parents[2] / ".env"
@@ -72,6 +78,20 @@ TEMP_GIF_NAME: Final[str] = "tmp"
 TEMP_GIF_DEFAULT_SECONDS: Final[int] = 5
 TEMP_GIF_MIN_SECONDS: Final[int] = 1
 TEMP_GIF_MAX_SECONDS: Final[int] = 30
+
+# Seconds to wait after the audio ends before restoring the previous gif in
+# show_temporary_gif_with_audio (also the grace applied when an explicit
+# duration is shorter than the audio).
+TEMP_RESTORE_AFTER_AUDIO_DELAY_SECONDS: Final[int] = 1
+# Seconds to wait between the accepted /set request and the audio start in
+# show_temporary_gif_with_audio. The Cube answers "OK" on receipt but still
+# needs a moment to load the file and start rendering; without this pause the
+# audio runs ahead of the first visible frame.
+TEMP_AUDIO_START_DELAY_SECONDS: Final[int] = 4
+# Upper bound (seconds) waiting for the audio to finish before restoring
+# anyway in show_temporary_gif_with_audio, so a stuck player cannot suspend
+# the random/special modes forever.
+TEMP_AUDIO_END_WAIT_MAX_SECONDS: Final[int] = 300
 
 # Temporary gif flow state. While _TEMP_GIF_RUNNING is True a tmp gif is being
 # shown and its previous gif has not been restored yet; new temporary shows are
@@ -1294,6 +1314,258 @@ def show_temporary_gif(data: str, filename: str, seconds: int = TEMP_GIF_DEFAULT
             f"{previous} will be restored automatically.{paused_note}"
         ),
     }
+
+
+def _restore_temp_gif_with_audio(
+    previous: str,
+    display_start: float,
+    seconds: int | None,
+    resume_random: bool = False,
+    resume_image: bool = False,
+    resume_special: bool = False,
+) -> None:
+    """Restore the previous gif after the longer of `seconds` vs audio end.
+
+    Runs in a background thread after show_temporary_gif_with_audio has
+    already replied, so any error here cannot be reported back to the client.
+    Waits for the audio to finish (bounded by TEMP_AUDIO_END_WAIT_MAX_SECONDS
+    so a stuck player cannot suspend the display modes forever), then restores
+    the previous gif at the later of `display_start + seconds` (when an
+    explicit duration was given) or TEMP_RESTORE_AFTER_AUDIO_DELAY_SECONDS
+    after the audio finished — so the image always lasts at least as long as
+    the audio. Resumes whichever display mode was suspended.
+    """
+    global _TEMP_GIF_RUNNING
+
+    try:
+        waited = 0
+        while waited < TEMP_AUDIO_END_WAIT_MAX_SECONDS and _is_ffplay_running():
+            time.sleep(1)
+            waited += 1
+        audio_end = time.monotonic()
+        grace_target = audio_end + TEMP_RESTORE_AFTER_AUDIO_DELAY_SECONDS
+        if seconds is not None:
+            target = max(display_start + seconds, grace_target)
+        else:
+            target = grace_target
+        remaining = target - time.monotonic()
+        if remaining > 0:
+            time.sleep(remaining)
+        if previous:
+            _set_cube_gif(previous)
+    except Exception:
+        pass
+    finally:
+        with _TEMP_GIF_LOCK:
+            _TEMP_GIF_RUNNING = False
+        if resume_random:
+            _resume_random_mode()
+        if resume_image:
+            _resume_image_mode()
+        if resume_special:
+            _resume_special_mode()
+
+
+@mcp.tool()
+def show_temporary_gif_with_audio(
+    data: str,
+    filename: str,
+    audio_data: str,
+    audio_name: str = "",
+    seconds: int | None = None,
+) -> dict[str, str]:
+    """
+    Shows a gif or jpg/jpeg image temporarily on the Cube display and plays
+    an audio alongside it.
+
+    Works like show_temporary_gif (same image validations, same upload as
+    tmp.gif/tmp.jpg, same suspension of any running random/special mode, same
+    background restore of the previous gif), plus audio: any audio already
+    playing is stopped first, then the new audio starts only after the
+    temporary image has been verified on the Cube and displayed, plus a short
+    delay (TEMP_AUDIO_START_DELAY_SECONDS) so the Cube finishes switching
+    frames before the sound starts. The call returns immediately; playback
+    continues in the background.
+
+    Args:
+        data: Image bytes encoded in Base64 (client-side).
+        filename: Name of the image, used to determine its type (.gif -> tmp.gif,
+            anything else -> tmp.jpg).
+        audio_data: Audio bytes encoded in Base64 (client-side, 10 MB max).
+            Required.
+        audio_name: Original audio filename, only used for status messages.
+        seconds: Seconds to show the image (clamped to [1, 30]). When omitted,
+            the previous gif is restored TEMP_RESTORE_AFTER_AUDIO_DELAY_SECONDS
+            (1 s) after the audio finishes. When given but shorter than the
+            audio, it is ignored (reported back) and the image lasts until 1 s
+            after the audio finishes.
+    """
+    global _TEMP_GIF_RUNNING
+
+    if not CUBE_BASE_URL:
+        return {"status": "error", "message": "CUBE_BASE_URL is not configured. Set it in the .env file."}
+
+    with _TEMP_GIF_LOCK:
+        busy = _TEMP_GIF_RUNNING
+    if busy:
+        return {
+            "status": "error",
+            "message": "A temporary gif is already being shown. Wait for it to finish before starting another.",
+        }
+
+    clamped = (
+        max(TEMP_GIF_MIN_SECONDS, min(TEMP_GIF_MAX_SECONDS, seconds))
+        if seconds is not None
+        else None
+    )
+
+    name = Path(filename.strip()).name
+
+    try:
+        payload = _decode_image(data)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to decode image {name}: {e}"}
+
+    if not payload:
+        return {"status": "error", "message": f"Image is empty: {name}."}
+
+    name, payload, conversion_error = _to_cube_compatible_image(name, payload)
+    if conversion_error:
+        return {"status": "error", "message": conversion_error}
+
+    tmp_name = f"{TEMP_GIF_NAME}.gif" if name.lower().endswith(".gif") else f"{TEMP_GIF_NAME}.jpg"
+
+    if not audio_data.strip():
+        return {"status": "error", "message": "Audio data is required."}
+    try:
+        audio_bytes = _decode_audio_payload(audio_data)
+    except ValueError as e:
+        return {"status": "error", "message": f"Failed to decode audio: {e}"}
+    if not audio_bytes:
+        return {"status": "error", "message": "Audio data is empty."}
+    try:
+        _build_player_command()
+    except RuntimeError as e:
+        return {"status": "error", "message": str(e)}
+    audio_duration = _probe_audio_duration(audio_bytes)
+
+    was_running_random = _suspend_random_mode()
+    was_running_image = _suspend_image_mode()
+    was_running_special = _suspend_special_mode()
+
+    def _resume_all() -> None:
+        if was_running_random:
+            _resume_random_mode()
+        if was_running_image:
+            _resume_image_mode()
+        if was_running_special:
+            _resume_special_mode()
+
+    try:
+        current = _fetch_cube_current_gif()
+    except Exception as e:
+        _resume_all()
+        return {"status": "error", "message": f"Failed to read current gif from Cube: {e}"}
+
+    result = upload_cube_image(base64.b64encode(payload).decode("ascii"), tmp_name)
+    if result["status"] != "success":
+        _resume_all()
+        return result
+
+    with _TEMP_GIF_LOCK:
+        if _TEMP_GIF_RUNNING:
+            _resume_all()
+            return {
+                "status": "error",
+                "message": "A temporary gif is already being shown. Wait for it to finish before starting another.",
+            }
+        _TEMP_GIF_RUNNING = True
+
+    try:
+        response = _set_cube_gif(tmp_name)
+    except Exception as e:
+        with _TEMP_GIF_LOCK:
+            _TEMP_GIF_RUNNING = False
+        _resume_all()
+        return {"status": "error", "message": f"Failed to display temporary gif {tmp_name}: {e}"}
+
+    if "FAIL" in response.upper():
+        with _TEMP_GIF_LOCK:
+            _TEMP_GIF_RUNNING = False
+        _resume_all()
+        return {
+            "status": "error",
+            "message": f"Cube refused to display temporary gif {tmp_name}. Response: {response}",
+        }
+
+    # The image is verified on the Cube and the /set request accepted — but
+    # that only acknowledges receipt, so stop any current audio, give the Cube
+    # a moment to actually switch frames, and only then start the new audio.
+    had_previous_audio = _is_ffplay_running()
+    stop_audio()
+    time.sleep(TEMP_AUDIO_START_DELAY_SECONDS)
+    try:
+        _play_audio_bytes_async(audio_bytes)
+        audio_label = (
+            f"{audio_name.strip() or 'audio'} ({len(audio_bytes)} bytes)"
+        )
+    except Exception as e:
+        with _TEMP_GIF_LOCK:
+            _TEMP_GIF_RUNNING = False
+        _resume_all()
+        return {
+            "status": "error",
+            "message": f"Temporary gif {tmp_name} is displayed but the audio failed: {e}",
+        }
+
+    previous = current.removeprefix(f"{CUBE_IMAGE_DIR}/").lstrip("/")
+    display_start = time.monotonic()
+    threading.Thread(
+        target=_restore_temp_gif_with_audio,
+        args=(previous, display_start, clamped, was_running_random, was_running_image, was_running_special),
+        daemon=True,
+    ).start()
+
+    grace_unit = (
+        "second" if TEMP_RESTORE_AFTER_AUDIO_DELAY_SECONDS == 1 else "seconds"
+    )
+    if clamped is None:
+        restore_note = (
+            f"{previous} will be restored {TEMP_RESTORE_AFTER_AUDIO_DELAY_SECONDS} {grace_unit} "
+            f"after the audio finishes."
+        )
+    else:
+        restore_note = f"{previous} will be restored automatically after {clamped} seconds."
+
+    paused_note = ""
+    if was_running_random:
+        paused_note = " Random gif mode paused (it will resume automatically)."
+    elif was_running_image:
+        paused_note = " Random image mode paused (it will resume automatically)."
+    elif was_running_special:
+        paused_note = " Special routine paused (it will resume automatically)."
+
+    parts = [f"Temporary gif {tmp_name} is now displayed with {audio_label}."]
+    if had_previous_audio:
+        parts.append("Previous audio stopped.")
+    if (
+        clamped is not None
+        and audio_duration is not None
+        and clamped < audio_duration
+    ):
+        parts.append(
+            f"Requested {clamped}s is shorter than the audio (~{audio_duration:.0f}s) "
+            f"and will be ignored; the image stays until "
+            f"{TEMP_RESTORE_AFTER_AUDIO_DELAY_SECONDS} {grace_unit} after the audio finishes."
+        )
+    if not previous:
+        parts.append("No previous gif to restore.")
+    else:
+        parts.append(restore_note)
+    if paused_note:
+        parts.append(paused_note.strip())
+
+    return {"status": "success", "message": " ".join(parts)}
 
 
 def _format_size_kb(size_bytes: int) -> str:

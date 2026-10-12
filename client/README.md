@@ -107,6 +107,10 @@ python -m client.main list-gallery-gifs
 # ⏱️ Show an image temporarily on the Cube (default 5 s, max 30 s, non-blocking; other formats are converted)
 python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
 
+# ⏱️🎵 Show an image temporarily with a synced audio (previous audio is stopped first; audio starts 4s after the image is verified on the Cube so it finishes switching frames; restores 1s after the audio ends unless --seconds is given)
+python -m client.main show-cube-gif-with-audio --file path/to/image.gif --audio path/to/sound.mp3
+python -m client.main show-cube-gif-with-audio --file path/to/image.gif --audio path/to/sound.mp3 --seconds 10
+
 # 🎲 Start cycling random images from media/images as random.jpg (must be 240x240, default 300 s / 5 min, max 3600 s)
 python -m client.main start-random-images --seconds 300
 
@@ -168,6 +172,7 @@ from client.cube_client import (
     show_gallery_image,
     show_gallery_gif,
     show_temporary_gif,
+    show_temporary_gif_with_audio,
     list_gallery_images,
     list_gallery_gifs,
     get_random_image_status,
@@ -321,6 +326,17 @@ async def main():
     # restored automatically in the background. Only one at a time.
     result = await show_temporary_gif("path/to/image.gif", seconds=10)
     print(f"Temporary show: {result}")
+
+    # ⏱️🎵 Same plus a synced audio: previous audio is stopped first and the
+    # new one starts 4 s after the image is verified on the Cube (the /set
+    # reply only acknowledges receipt; the pause lets the Cube finish
+    # switching frames). The audio file is always required. Without seconds
+    # the previous gif comes back 1 s after the audio finishes; with seconds
+    # it comes back after that time instead.
+    result = await show_temporary_gif_with_audio("path/to/image.gif", "path/to/sound.mp3")
+    print(f"Temporary show with audio: {result}")
+    result = await show_temporary_gif_with_audio("path/to/image.gif", "path/to/sound.mp3", seconds=10)
+    print(f"Temporary show with audio and fixed duration: {result}")
 
     # 🎲 Start cycling random images from media/images as random.jpg.
     # Images must be 240x240. A new random image is uploaded and displayed

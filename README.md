@@ -115,6 +115,10 @@ python -m client.main list-gallery-gifs
 # ⏱️ Show an image temporarily on the Cube (default 5 s, max 30 s, non-blocking; other formats are converted)
 python -m client.main show-cube-gif --file path/to/image.gif --seconds 10
 
+# ⏱️🎵 Show an image temporarily with a synced audio (previous audio is stopped first; audio starts 4s after the image is verified on the Cube so it finishes switching frames; restores 1s after the audio ends unless --seconds is given)
+python -m client.main show-cube-gif-with-audio --file path/to/image.gif --audio path/to/sound.mp3
+python -m client.main show-cube-gif-with-audio --file path/to/image.gif --audio path/to/sound.mp3 --seconds 10
+
 # 🎲 Start cycling random images from media/images as random.jpg (must be 240x240, default 300 s / 5 min, max 3600 s)
 python -m client.main start-random-images --seconds 300
 
