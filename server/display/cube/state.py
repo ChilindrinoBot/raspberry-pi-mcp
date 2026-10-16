@@ -46,9 +46,18 @@ _SPECIAL_OIIA_DURATION: int | None = None
 _SPECIAL_OIIA_RENEW: int | None = None
 _SPECIAL_MODE_LOCK: Final[threading.Lock] = threading.Lock()
 
+
 # Brightness level remembered when the display is turned off, so it can be
-# restored on the next power on. None means nothing has been remembered yet.
+# restored on the next power on within the same session. Session memory
+# only (nothing brightness-related is persisted): the live level is always
+# re-readable from the Cube, and the Cube persists its own level across
+# its reboots. None means nothing has been remembered yet.
 _REMEMBERED_BRIGHTNESS: int | None = None
+
+# Remembered night-mode window and switch ({time1, time2, enabled}). The day
+# level is deliberately NOT stored anywhere: it is live-read from the Cube
+# on every schedule send. None means no schedule has been sent yet.
+_BRIGHTNESS_SCHEDULE: dict[str, object] | None = None
 
 
 def _is_random_mode_running() -> bool:

@@ -17,6 +17,19 @@ BRIGHTNESS_DEFAULT: Final[int] = 50
 BRIGHTNESS_MIN: Final[int] = 0
 BRIGHTNESS_MAX: Final[int] = 100
 
+# Firmware time-based brightness schedule (/set?t1=&t2=&b1=&b2=&en=):
+# t1/t2 bound the "HH:MM" day window, b1/b2 are the day/night brightness
+# levels, en enables the schedule. The firmware UI fixes b1 at 50.
+BRIGHTNESS_SCHEDULE_DEFAULT_START: Final[str] = "08:00"
+BRIGHTNESS_SCHEDULE_DEFAULT_END: Final[str] = "22:00"
+BRIGHTNESS_SCHEDULE_DEFAULT_DAY: Final[int] = 50
+# Night brightness is always 0 (display off); intentionally not a parameter.
+
+# SQLite file holding persistent cube state (last schedule, remembered
+# brightness) that must survive server restarts. Lives under media/
+# (gitignored) next to the galleries.
+STATE_DB_FILE: Final[Path] = Path(__file__).resolve().parents[3] / "media" / "state.db"
+
 CUBE_IMAGE_DIR: Final[str] = "/image"
 ALLOWED_UPLOAD_SUFFIXES: Final[frozenset[str]] = frozenset({".gif", ".jpg", ".jpeg"})
 IMAGE_REQUIRED_DIMENSIONS: Final[tuple[int, int]] = (240, 240)

@@ -7,6 +7,8 @@ from client.cube_client import (
     set_cube_gif,
     set_cube_brightness,
     get_cube_brightness,
+    set_cube_brightness_schedule,
+    get_cube_brightness_schedule,
     turn_cube_display_off,
     turn_cube_display_on,
 )
@@ -237,6 +239,74 @@ class SetCubeBrightnessClientTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertIn("Failed to set brightness on Cube", result["message"])
+
+
+class SetCubeBrightnessScheduleClientTests(unittest.TestCase):
+    @patch("client.cube_client.Client")
+    def test_calls_schedule_tool_with_all_params(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Cube brightness schedule enabled"}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(set_cube_brightness_schedule("07:30", "21:15", False))
+
+        mock_client.call_tool.assert_called_once_with(
+            "set_cube_brightness_schedule",
+            {"time1": "07:30", "time2": "21:15", "enabled": False},
+        )
+
+    @patch("client.cube_client.Client")
+    def test_defaults_match_server(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Cube brightness schedule enabled"}}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(set_cube_brightness_schedule())
+
+        mock_client.call_tool.assert_called_once_with(
+            "set_cube_brightness_schedule",
+            {"time1": "08:00", "time2": "22:00", "enabled": True},
+        )
+
+    @patch("client.cube_client.Client")
+    def test_returns_success(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.call_tool.return_value = type(
+            "Obj", (), {"structured_content": {"status": "success", "message": "Cube brightness schedule enabled"}}
+        )()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(set_cube_brightness_schedule("08:00", "22:00", True))
+
+        self.assertEqual(result["status"], "success")
+
+
+class GetCubeBrightnessScheduleClientTests(unittest.TestCase):
+    @patch("client.cube_client.Client")
+    def test_reads_schedule_resource(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type(
+            "Obj", (), {"contents": [type("Obj", (), {"text": "Cube brightness schedule (enabled)"})()]}
+        )()
+        MockClient.return_value = ctx
+
+        asyncio.run(get_cube_brightness_schedule())
+
+        mock_client.read_resource.assert_called_once_with("cube://brightness-schedule")
+
+    @patch("client.cube_client.Client")
+    def test_returns_no_schedule_when_empty(self, MockClient) -> None:
+        ctx, mock_client = _make_client_mock()
+        mock_client.read_resource.return_value = type("Obj", (), {"contents": []})()
+        MockClient.return_value = ctx
+
+        result = asyncio.run(get_cube_brightness_schedule())
+
+        self.assertEqual(result, "No brightness schedule information available for the Cube.")
 
 
 class TurnCubeDisplayOffClientTests(unittest.TestCase):

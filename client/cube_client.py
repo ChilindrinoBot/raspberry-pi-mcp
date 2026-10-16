@@ -81,6 +81,31 @@ async def set_cube_brightness(level: int = 50) -> dict[str, str]:
         return result.structured_content
 
 
+async def set_cube_brightness_schedule(
+    time1: str = "08:00",
+    time2: str = "22:00",
+    enabled: bool = True,
+) -> dict[str, str]:
+    """Requests the server to set the Cube time-based brightness schedule (day uses the single brightness value, night is always 0)."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.call_tool(
+            "set_cube_brightness_schedule",
+            {"time1": time1, "time2": time2, "enabled": enabled},
+        )
+        return result.structured_content
+
+
+async def get_cube_brightness_schedule() -> str:
+    """Fetches the last brightness schedule sent to the Cube from the server resource."""
+    async with Client(AuthTransport(SERVER_URL)) as client:
+        result = await client.read_resource("cube://brightness-schedule")
+
+        if not result.contents:
+            return "No brightness schedule information available for the Cube."
+
+        return result.contents[0].text
+
+
 async def turn_cube_display_off() -> dict[str, str]:
     """Requests the server to turn off the Cube display (brightness 0, remembering the previous level)."""
     async with Client(AuthTransport(SERVER_URL)) as client:

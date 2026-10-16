@@ -69,10 +69,29 @@ def _set_cube_brightness(level: int) -> str:
 
 
 def _fetch_cube_brightness() -> int:
-    """Fetch the /brt.json endpoint from the Cube and return the current brightness level."""
+    """Fetch the /brt.json endpoint from the Cube and return the current brightness level.
+
+    The firmware reports its "off" state as -10 (only level 0 reads back this
+    way), so negative readings are normalized to 0.
+    """
     url = f"{config.CUBE_BASE_URL}/brt.json"
     data = json.loads(urllib.request.urlopen(url).read().decode())
-    return int(data["brt"])
+    return max(0, int(data["brt"]))
+
+
+def _set_cube_brightness_schedule(start: str, end: str, day: int, night: int, enabled: bool) -> str:
+    """Send the firmware night-mode schedule, returning the response body.
+
+    Mirrors the firmware GUI (Night Mode: Start/End Time + night brightness):
+    <start>-<end> ("HH:MM") bounds the NIGHT window, which uses <night>,
+    while the rest of the day uses <day>; <enabled> switches it on/off.
+    The firmware does not expose the schedule for reading back.
+    """
+    url = (
+        f"{config.CUBE_BASE_URL}/set?t1={start}&t2={end}"
+        f"&b1={day}&b2={night}&en={1 if enabled else 0}"
+    )
+    return urllib.request.urlopen(url).read().decode().strip()
 
 
 def _fetch_cube_current_gif() -> str:

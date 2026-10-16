@@ -16,6 +16,10 @@ from server.auth_middleware import AuthMiddleware
 __all__ = ["mcp"]
 
 if __name__ == "__main__":
+    from server.display.cube import display as _cube_display
+
+    _cube_display._restore_persistent_state()
+
     app = mcp.streamable_http_app(
         streamable_http_path="/mcp",
         transport_security=TransportSecuritySettings(

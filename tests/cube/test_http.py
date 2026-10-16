@@ -11,6 +11,7 @@ from server.display.cube import (
     _set_cube_gif,
     _fetch_cube_brightness,
     _set_cube_brightness,
+    _set_cube_brightness_schedule,
     _fetch_cube_current_gif,
     _upload_cube_image,
 )
@@ -124,6 +125,14 @@ class FetchCubeBrightnessTests(unittest.TestCase):
 
             self.assertEqual(brightness, 10)
 
+    def test_normalizes_firmware_off_state_to_zero(self) -> None:
+        with patch("server.display.cube.http.urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value.read.return_value = b'{"brt":"-10"}'
+
+            brightness = _fetch_cube_brightness()
+
+            self.assertEqual(brightness, 0)
+
     def test_fetch_failure_raises(self) -> None:
         with patch(
             "server.display.cube.http.urllib.request.urlopen",
@@ -172,6 +181,36 @@ class SetCubeBrightnessHelperTests(unittest.TestCase):
         ):
             with self.assertRaises(Exception) as ctx:
                 _set_cube_brightness(50)
+
+            self.assertIn("connection refused", str(ctx.exception))
+
+
+class SetCubeBrightnessScheduleHelperTests(unittest.TestCase):
+    def test_set_request_targets_schedule_endpoint(self) -> None:
+        with patch("server.display.cube.http.urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value.read.return_value = b"OK"
+
+            _set_cube_brightness_schedule("08:00", "22:00", 50, 20, True)
+
+            called_url = mock_urlopen.call_args[0][0]
+            self.assertIn("/set?t1=08:00&t2=22:00&b1=50&b2=20&en=1", called_url)
+
+    def test_disabled_schedule_sends_en_zero(self) -> None:
+        with patch("server.display.cube.http.urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value.read.return_value = b"OK"
+
+            _set_cube_brightness_schedule("07:30", "21:15", 60, 10, False)
+
+            called_url = mock_urlopen.call_args[0][0]
+            self.assertIn("/set?t1=07:30&t2=21:15&b1=60&b2=10&en=0", called_url)
+
+    def test_fetch_failure_raises(self) -> None:
+        with patch(
+            "server.display.cube.http.urllib.request.urlopen",
+            side_effect=ConnectionRefusedError("connection refused"),
+        ):
+            with self.assertRaises(Exception) as ctx:
+                _set_cube_brightness_schedule("08:00", "22:00", 50, 20, True)
 
             self.assertIn("connection refused", str(ctx.exception))
 

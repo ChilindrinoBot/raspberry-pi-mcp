@@ -88,6 +88,12 @@ python -m client.main set-cube-brightness --level 10
 # ✨ Get the current brightness level of the Cube display
 python -m client.main get-cube-brightness
 
+# 🕖 Set the time-based brightness schedule (day window HH:MM, night always 0; day is live-read from the Cube)
+python -m client.main set-cube-brightness-schedule --time1 07:00 --time2 23:00
+
+# 🕖 Get the last brightness schedule sent to the Cube
+python -m client.main get-cube-brightness-schedule
+
 # 🌙 Turn off the Cube display (brightness 0, remembers the previous level)
 python -m client.main turn-cube-off
 

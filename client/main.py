@@ -21,6 +21,8 @@ from .cube_client import (
     set_cube_gif,
     set_cube_brightness,
     get_cube_brightness,
+    set_cube_brightness_schedule,
+    get_cube_brightness_schedule,
     turn_cube_display_off,
     turn_cube_display_on,
     upload_cube_image,
@@ -175,6 +177,22 @@ async def run_cli():
 
     # Command 'get-cube-brightness'
     subparsers.add_parser("get-cube-brightness", help="Get the current brightness level of the Cube display")
+
+    # Command 'set-cube-brightness-schedule'
+    schedule_parser = subparsers.add_parser(
+        "set-cube-brightness-schedule",
+        help="Set the Cube time-based brightness schedule (dim at night)",
+    )
+    schedule_parser.add_argument("--time1", default="08:00", help="Day window start HH:MM (default: 08:00)")
+    schedule_parser.add_argument("--time2", default="22:00", help="Day window end HH:MM (default: 22:00)")
+    schedule_parser.add_argument(
+        "--disabled", action="store_true", help="Disable the schedule instead of enabling it"
+    )
+
+    # Command 'get-cube-brightness-schedule'
+    subparsers.add_parser(
+        "get-cube-brightness-schedule", help="Get the last brightness schedule sent to the Cube"
+    )
 
     # Command 'turn-cube-off'
     subparsers.add_parser(
@@ -430,6 +448,18 @@ async def run_cli():
         elif args.command == "get-cube-brightness":
             print("Fetching current Cube brightness level...")
             res = await get_cube_brightness()
+            print(f"\n{res}")
+        elif args.command == "set-cube-brightness-schedule":
+            print(f"Setting Cube brightness schedule {args.time1}-{args.time2}...")
+            res = await set_cube_brightness_schedule(
+                args.time1,
+                args.time2,
+                not args.disabled,
+            )
+            print(f"Server Response: {res}")
+        elif args.command == "get-cube-brightness-schedule":
+            print("Fetching last Cube brightness schedule...")
+            res = await get_cube_brightness_schedule()
             print(f"\n{res}")
         elif args.command == "turn-cube-off":
             print("Turning off the Cube display...")
