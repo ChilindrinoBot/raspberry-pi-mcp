@@ -3,6 +3,7 @@ from __future__ import annotations
 from .... import mcp
 from .. import config
 from .. import state
+from .. import store
 from . import oiia
 from . import pato_gira
 
@@ -102,8 +103,23 @@ def start_special_routine(
         return {"status": "error", "message": "Routine name is required."}
 
     if routine == "oiia":
-        return oiia._start_special_oiia(every=every, duration=duration, renew=renew)
-    return pato_gira._start_special_pato_gira(routine, seconds)
+        result = oiia._start_special_oiia(every=every, duration=duration, renew=renew)
+    else:
+        result = pato_gira._start_special_pato_gira(routine, seconds)
+
+    if result.get("status") == "success":
+        store.update_cube_config(
+            active_mode={
+                "kind": "special",
+                "routine": routine,
+                "seconds": seconds,
+                "every": every,
+                "duration": duration,
+                "renew": renew,
+            }
+        )
+
+    return result
 
 
 @mcp.tool()
@@ -115,6 +131,7 @@ def stop_special_routine() -> dict[str, str]:
     The loop stops; whatever was last displayed remains on the Cube.
     """
     was_running, current = state._stop_special_mode()
+    store.update_cube_config(active_mode=None)
     if not was_running:
         return {"status": "success", "message": "Special routine is not running."}
     msg = "Special routine stopped."

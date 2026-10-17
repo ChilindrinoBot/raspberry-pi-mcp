@@ -23,6 +23,24 @@ def _image_bytes(fmt: str, width: int, height: int) -> bytes:
     return buffer.getvalue()
 
 
+def _isolate_state_db(testcase: unittest.TestCase) -> None:
+    """Point the state database at a temp file (never touch media/state.db)."""
+    tmp = Path(tempfile.mkdtemp())
+    testcase._tmp_db = tmp
+    testcase._db_patcher = patch(
+        "server.display.cube.config.STATE_DB_FILE",
+        tmp / "state.db",
+    )
+    testcase._db_patcher.start()
+
+
+def _release_state_db(testcase: unittest.TestCase) -> None:
+    testcase._db_patcher.stop()
+    import shutil
+
+    shutil.rmtree(testcase._tmp_db, ignore_errors=True)
+
+
 class SaveImageInGalleryTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = Path(tempfile.mkdtemp())
@@ -244,8 +262,10 @@ class ShowGalleryImageTests(unittest.TestCase):
         patcher = patch.object(cube_module.config, "RANDOM_IMAGE_DIR", self._tmpdir)
         patcher.start()
         self.addCleanup(patcher.stop)
+        _isolate_state_db(self)
 
     def tearDown(self) -> None:
+        _release_state_db(self)
         import shutil
 
         shutil.rmtree(self._tmpdir, ignore_errors=True)
@@ -401,6 +421,28 @@ class ShowGalleryImageTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn("Cube refused to set image photo.jpg", result["message"])
 
+    @patch("server.display.cube.http._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.state._stop_image_mode", return_value=(True, "old.jpg"))
+    @patch("server.display.cube.state._stop_random_mode", return_value=(True, "old.gif"))
+    @patch("server.display.cube.http._fetch_cube_gifs")
+    @patch("server.display.cube.http._upload_cube_image")
+    def test_clears_persisted_mode_when_stopping_random(
+        self,
+        mock_upload: Mock,
+        mock_gifs: Mock,
+        mock_stop_random: Mock,
+        mock_stop_image: Mock,
+        mock_set: Mock,
+    ) -> None:
+        self._write_jpeg("photo.jpg")
+        mock_gifs.return_value = ["photo.jpg"]
+        cube_module.store.update_cube_config(active_mode={"kind": "random_gif"})
+
+        result = show_gallery_image("photo.jpg")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIsNone(cube_module.store.get_cube_config()["active_mode"])
+
 
 class ShowGalleryGifTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -408,6 +450,7 @@ class ShowGalleryGifTests(unittest.TestCase):
         dir_patcher = patch.object(cube_module.config, "RANDOM_GIF_DIR", self._tmpdir)
         dir_patcher.start()
         self.addCleanup(dir_patcher.stop)
+        _isolate_state_db(self)
 
         self._original_running = cube_module.state._TEMP_GIF_RUNNING
         cube_module.state._TEMP_GIF_RUNNING = False
@@ -415,6 +458,7 @@ class ShowGalleryGifTests(unittest.TestCase):
     def tearDown(self) -> None:
         import shutil
 
+        _release_state_db(self)
         cube_module.state._TEMP_GIF_RUNNING = self._original_running
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
@@ -526,6 +570,28 @@ class ShowGalleryGifTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertIn("Random gif mode stopped", result["message"])
         self.assertIn("Random image mode stopped", result["message"])
+
+    @patch("server.display.cube.http._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.state._stop_image_mode", return_value=(True, "old.jpg"))
+    @patch("server.display.cube.state._stop_random_mode", return_value=(True, "old.gif"))
+    @patch("server.display.cube.http._fetch_cube_gifs")
+    @patch("server.display.cube.http._upload_cube_image")
+    def test_clears_persisted_mode_when_stopping_random(
+        self,
+        mock_upload: Mock,
+        mock_gifs: Mock,
+        mock_stop_random: Mock,
+        mock_stop_image: Mock,
+        mock_set: Mock,
+    ) -> None:
+        self._write_gif("anim.gif")
+        mock_gifs.return_value = ["tmp.gif"]
+        cube_module.store.update_cube_config(active_mode={"kind": "random_image"})
+
+        result = show_gallery_gif("anim")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIsNone(cube_module.store.get_cube_config()["active_mode"])
 
     @patch("server.display.cube.state._stop_image_mode", return_value=(False, None))
     @patch("server.display.cube.state._stop_random_mode", return_value=(False, None))

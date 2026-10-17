@@ -61,16 +61,21 @@ def delete_setting(key: str) -> None:
 
 # The single cube_config object: the whole persistent cube state in one row,
 # so reads and writes are always whole-object snapshots that cannot end up
-# half-written. Persist-only-what-you-can't-re-read: just the schedule hours
-# (the firmware exposes nothing). Brightness is never stored — the live
-# level is always re-readable from the Cube itself, which persists it on its
-# own side too.
+# half-written. Persisted: the schedule hours (the firmware exposes
+# nothing) and the active display mode (loops die with the server and must
+# be restarted at boot). Brightness is never stored: the live level is
+# always re-readable from the Cube itself, which persists its own level
+# across its reboots. Static screens (gallery, manual gif) need nothing:
+# the Cube keeps showing them on its own.
 _CONFIG_KEY: Final[str] = "cube_config"
 _CONFIG_LOCK: Final[threading.Lock] = threading.Lock()
 
 
+# active_mode holds one loop: random gif/image use only `seconds`, 
+# generic special routines use `seconds`, oiia uses `every`/`duration`/`renew` (ignoring `seconds`); 
+# unused fields stay None.
 def _default_config() -> dict[str, Any]:
-    return {"schedule": None}
+    return {"schedule": None, "active_mode": None}
 
 
 def _slim_schedule(raw: Any) -> dict[str, Any] | None:
@@ -88,12 +93,16 @@ def _slim_schedule(raw: Any) -> dict[str, Any] | None:
 
 
 def get_cube_config() -> dict[str, Any]:
-    """Return the whole persistent cube config (hours only, normalized)."""
+    """Return the whole persistent cube config (hours + active mode)."""
     stored = get_setting(_CONFIG_KEY)
     schedule: dict[str, Any] | None = None
+    active_mode: dict[str, Any] | None = None
     if isinstance(stored, dict):
         schedule = _slim_schedule(stored.get("schedule"))
-    return {"schedule": schedule}
+        raw_mode = stored.get("active_mode")
+        if isinstance(raw_mode, dict):
+            active_mode = raw_mode
+    return {"schedule": schedule, "active_mode": active_mode}
 
 
 def update_cube_config(**kwargs: Any) -> dict[str, Any]:

@@ -641,8 +641,10 @@ class RandomModeInteractionFixture(unittest.TestCase):
         cube_module.state._RANDOM_IMAGE_MODE_SUSPENDED = False
         cube_module.state._RANDOM_CURRENT_IMAGE = None
         cube_module.state._TEMP_GIF_RUNNING = False
+        _isolate_state_db(self)
 
     def tearDown(self) -> None:
+        _release_state_db(self)
         (
             cube_module.state._RANDOM_MODE_RUNNING,
             cube_module.state._RANDOM_CURRENT_GIF,
@@ -668,6 +670,20 @@ class SetCubeGifStopsRandomModeTests(RandomModeInteractionFixture):
         self.assertIn("Random gif mode stopped.", result["message"])
         self.assertFalse(cube_module.state._RANDOM_MODE_RUNNING)
         mock_set.assert_called_once_with("gif1.gif")
+
+    @patch("server.display.cube.http._set_cube_gif", return_value="OK")
+    @patch("server.display.cube.http._fetch_cube_gifs", return_value=["gif1.gif"])
+    def test_clears_persisted_mode_when_stopping(
+        self, mock_gifs: Mock, mock_set: Mock
+    ) -> None:
+        cube_module.store.update_cube_config(active_mode={"kind": "random_gif"})
+        cube_module.state._RANDOM_MODE_RUNNING = True
+        cube_module.state._RANDOM_CURRENT_GIF = "gifx.gif"
+
+        result = set_cube_gif("gif1.gif")
+
+        self.assertEqual(result["status"], "success")
+        self.assertIsNone(cube_module.store.get_cube_config()["active_mode"])
 
     @patch("server.display.cube.http._set_cube_gif", return_value="OK")
     @patch("server.display.cube.http._fetch_cube_gifs", return_value=["gif1.gif"])
@@ -750,6 +766,71 @@ class RestorePersistentStateTests(unittest.TestCase):
 
         mock_set.assert_not_called()
         self.assertIsNone(cube_module.state._BRIGHTNESS_SCHEDULE)
+
+    @patch("server.display.cube.random_modes.start_random_gifs", return_value={"status": "success"})
+    def test_resumes_random_gif_mode(self, mock_start: Mock) -> None:
+        cube_module.store.update_cube_config(
+            active_mode={"kind": "random_gif", "seconds": 60}
+        )
+
+        cube_module.display._restore_persistent_state()
+
+        mock_start.assert_called_once_with(60)
+
+    @patch("server.display.cube.random_modes.start_random_images", return_value={"status": "success"})
+    def test_resumes_random_image_mode(self, mock_start: Mock) -> None:
+        cube_module.store.update_cube_config(
+            active_mode={"kind": "random_image", "seconds": 90}
+        )
+
+        cube_module.display._restore_persistent_state()
+
+        mock_start.assert_called_once_with(90)
+
+    @patch("server.display.cube.special.core.start_special_routine", return_value={"status": "success"})
+    def test_resumes_special_routine(self, mock_start: Mock) -> None:
+        cube_module.store.update_cube_config(
+            active_mode={
+                "kind": "special",
+                "routine": "pato-gira",
+                "seconds": 10,
+                "every": 30,
+                "duration": 5,
+                "renew": 120,
+            }
+        )
+
+        cube_module.display._restore_persistent_state()
+
+        mock_start.assert_called_once_with("pato-gira", 10, 30, 5, 120)
+
+    @patch("server.display.cube.random_modes.start_random_gifs")
+    @patch("server.display.cube.random_modes.start_random_images")
+    @patch("server.display.cube.special.core.start_special_routine")
+    def test_ignores_unknown_kind(self, mock_special: Mock, mock_images: Mock, mock_gifs: Mock) -> None:
+        cube_module.store.update_cube_config(active_mode={"kind": "mystery"})
+
+        cube_module.display._restore_persistent_state()
+
+        mock_gifs.assert_not_called()
+        mock_images.assert_not_called()
+        mock_special.assert_not_called()
+
+    @patch(
+        "server.display.cube.random_modes.start_random_gifs",
+        return_value={"status": "error", "message": "Cube unreachable"},
+    )
+    def test_failed_resume_keeps_intent(self, mock_start: Mock) -> None:
+        cube_module.store.update_cube_config(
+            active_mode={"kind": "random_gif", "seconds": 60}
+        )
+
+        cube_module.display._restore_persistent_state()
+
+        mock_start.assert_called_once_with(60)
+        self.assertEqual(
+            cube_module.store.get_cube_config()["active_mode"]["kind"], "random_gif"
+        )
 
 
 if __name__ == "__main__":

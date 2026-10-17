@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 from server.display import cube as cube_module
@@ -45,8 +46,16 @@ class SpecialModeStateTestCase(unittest.TestCase):
         cube_module.state._SPECIAL_INTERVAL = None
         cube_module.state._SPECIAL_OIIA_DURATION = None
         cube_module.state._SPECIAL_OIIA_RENEW = None
+        self._tmp_db = TemporaryDirectory()
+        self._db_patcher = patch(
+            "server.display.cube.config.STATE_DB_FILE",
+            Path(self._tmp_db.name) / "state.db",
+        )
+        self._db_patcher.start()
 
     def tearDown(self) -> None:
+        self._db_patcher.stop()
+        self._tmp_db.cleanup()
         (
             cube_module.state._SPECIAL_MODE_RUNNING,
             cube_module.state._SPECIAL_MODE_SUSPENDED,
@@ -217,6 +226,27 @@ class StartSpecialRoutineTests(SpecialModeStateTestCase):
         import shutil
         shutil.rmtree(tmp, ignore_errors=True)
 
+    @patch(
+        "server.display.cube.special.pato_gira._start_special_pato_gira",
+        return_value={"status": "success", "message": "ok"},
+    )
+    def test_persists_active_mode(self, mock_start: Mock) -> None:
+        result = start_special_routine("pato-gira", seconds=10)
+
+        self.assertEqual(result["status"], "success")
+        mock_start.assert_called_once_with("pato-gira", 10)
+        self.assertEqual(
+            cube_module.store.get_cube_config()["active_mode"],
+            {
+                "kind": "special",
+                "routine": "pato-gira",
+                "seconds": 10,
+                "every": 60,
+                "duration": 10,
+                "renew": 600,
+            },
+        )
+
     @patch("server.display.cube.special.pato_gira._list_special_gifs", return_value=[])
     def test_returns_error_when_no_gifs(self, mock_list: Mock) -> None:
         with patch.object(cube_module.config, "CUBE_BASE_URL", "http://fake"):
@@ -272,6 +302,27 @@ class StartSpecialOiiaTests(SpecialModeStateTestCase):
         self.assertEqual(OIIA_DEFAULT_EVERY, 60)
         self.assertEqual(OIIA_DEFAULT_DURATION, 10)
         self.assertEqual(OIIA_DEFAULT_RENEW, 600)
+
+    @patch(
+        "server.display.cube.special.oiia._start_special_oiia",
+        return_value={"status": "success", "message": "ok"},
+    )
+    def test_persists_active_mode_with_timers(self, mock_start: Mock) -> None:
+        result = start_special_routine("oiia", every=30, duration=5, renew=120)
+
+        self.assertEqual(result["status"], "success")
+        mock_start.assert_called_once_with(every=30, duration=5, renew=120)
+        self.assertEqual(
+            cube_module.store.get_cube_config()["active_mode"],
+            {
+                "kind": "special",
+                "routine": "oiia",
+                "seconds": 60,
+                "every": 30,
+                "duration": 5,
+                "renew": 120,
+            },
+        )
 
     def _make_oiia_dir(self) -> Path:
         import tempfile
@@ -367,6 +418,16 @@ class StopSpecialRoutineTests(SpecialModeStateTestCase):
         self.assertIn("stopped", result["message"].lower())
         self.assertIn("001.gif", result["message"])
         self.assertFalse(cube_module.state._SPECIAL_MODE_RUNNING)
+
+    def test_clears_persisted_mode(self) -> None:
+        cube_module.store.update_cube_config(active_mode={"kind": "special"})
+        cube_module.state._SPECIAL_MODE_RUNNING = True
+        cube_module.state._SPECIAL_CURRENT_GIF = "pato-gira.gif"
+
+        result = stop_special_routine()
+
+        self.assertEqual(result["status"], "success")
+        self.assertIsNone(cube_module.store.get_cube_config()["active_mode"])
 
 
 class SpecialLoopTests(SpecialModeStateTestCase):

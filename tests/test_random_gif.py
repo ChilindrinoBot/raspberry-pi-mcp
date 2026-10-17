@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import Mock, call, patch
 
 from server.display import cube as cube_module
@@ -27,8 +28,16 @@ class RandomModeStateTestCase(unittest.TestCase):
         cube_module.state._RANDOM_MODE_RUNNING = False
         cube_module.state._RANDOM_MODE_SUSPENDED = False
         cube_module.state._RANDOM_CURRENT_GIF = None
+        self._tmp_db = TemporaryDirectory()
+        self._db_patcher = patch(
+            "server.display.cube.config.STATE_DB_FILE",
+            Path(self._tmp_db.name) / "state.db",
+        )
+        self._db_patcher.start()
 
     def tearDown(self) -> None:
+        self._db_patcher.stop()
+        self._tmp_db.cleanup()
         (
             cube_module.state._RANDOM_MODE_RUNNING,
             cube_module.state._RANDOM_MODE_SUSPENDED,
@@ -363,6 +372,27 @@ class StartRandomGifsTests(RandomModeStateTestCase):
         mock_thread_cls.return_value.start.assert_called_once()
 
     @patch("server.display.cube.state.threading.Thread")
+    @patch("server.display.cube.random_modes._run_random_cycle", return_value=(True, "first.gif"))
+    @patch("server.display.cube.gallery._list_local_gifs", return_value=[Path("first.gif")])
+    def test_persists_active_mode(
+        self, mock_list: Mock, mock_cycle: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = start_random_gifs(seconds=60)
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(
+            cube_module.store.get_cube_config()["active_mode"],
+            {
+                "kind": "random_gif",
+                "routine": None,
+                "seconds": 60,
+                "every": None,
+                "duration": None,
+                "renew": None,
+            },
+        )
+
+    @patch("server.display.cube.state.threading.Thread")
     @patch("server.display.cube.random_modes._run_random_cycle", return_value=(True, "x.gif"))
     @patch("server.display.cube.gallery._list_local_gifs", return_value=[Path("x.gif")])
     def test_clamps_seconds_to_valid_range(
@@ -474,6 +504,16 @@ class StopRandomGifsTests(RandomModeStateTestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["message"], "Random gif mode is not running.")
+
+    def test_clears_persisted_mode(self) -> None:
+        cube_module.store.update_cube_config(active_mode={"kind": "random_gif"})
+        cube_module.state._RANDOM_MODE_RUNNING = True
+        cube_module.state._RANDOM_CURRENT_GIF = "shown.gif"
+
+        result = stop_random_gifs()
+
+        self.assertEqual(result["status"], "success")
+        self.assertIsNone(cube_module.store.get_cube_config()["active_mode"])
 
 
 class RandomGifLoopTests(RandomModeStateTestCase):

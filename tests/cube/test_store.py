@@ -68,16 +68,25 @@ class CubeConfigTests(unittest.TestCase):
         self.addCleanup(self._patcher.stop)
 
     def test_starts_empty(self) -> None:
-        self.assertEqual(cube_module.store.get_cube_config(), {"schedule": None})
+        self.assertEqual(
+            cube_module.store.get_cube_config(),
+            {"schedule": None, "active_mode": None},
+        )
 
     def test_update_merges_fields(self) -> None:
         cube_module.store.update_cube_config(
             schedule={"time1": "07:00", "time2": "23:00", "enabled": True}
         )
+        cube_module.store.update_cube_config(
+            active_mode={"kind": "random_gif", "seconds": 60}
+        )
 
         self.assertEqual(
             cube_module.store.get_cube_config(),
-            {"schedule": {"time1": "07:00", "time2": "23:00", "enabled": True}},
+            {
+                "schedule": {"time1": "07:00", "time2": "23:00", "enabled": True},
+                "active_mode": {"kind": "random_gif", "seconds": 60},
+            },
         )
 
     def test_normalizes_rows_to_hours_only(self) -> None:
@@ -97,7 +106,7 @@ class CubeConfigTests(unittest.TestCase):
         config = cube_module.store.get_cube_config()
 
         self.assertEqual(
-            config, {"schedule": {"time1": "07:00", "time2": "23:00", "enabled": True}}
+            config["schedule"], {"time1": "07:00", "time2": "23:00", "enabled": True}
         )
         # Second read is stable.
         self.assertEqual(cube_module.store.get_cube_config(), config)
@@ -117,7 +126,10 @@ class CubeConfigTests(unittest.TestCase):
     def test_ignores_non_dict_unified_row(self) -> None:
         cube_module.store.set_setting("cube_config", [1, 2, 3])
 
-        self.assertEqual(cube_module.store.get_cube_config(), {"schedule": None})
+        self.assertEqual(
+            cube_module.store.get_cube_config(),
+            {"schedule": None, "active_mode": None},
+        )
 
 
 if __name__ == "__main__":

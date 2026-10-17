@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import Mock, call, patch
 
 from server.display import cube as cube_module
@@ -27,8 +28,16 @@ class ImageModeStateTestCase(unittest.TestCase):
         cube_module.state._RANDOM_IMAGE_MODE_RUNNING = False
         cube_module.state._RANDOM_IMAGE_MODE_SUSPENDED = False
         cube_module.state._RANDOM_CURRENT_IMAGE = None
+        self._tmp_db = TemporaryDirectory()
+        self._db_patcher = patch(
+            "server.display.cube.config.STATE_DB_FILE",
+            Path(self._tmp_db.name) / "state.db",
+        )
+        self._db_patcher.start()
 
     def tearDown(self) -> None:
+        self._db_patcher.stop()
+        self._tmp_db.cleanup()
         (
             cube_module.state._RANDOM_IMAGE_MODE_RUNNING,
             cube_module.state._RANDOM_IMAGE_MODE_SUSPENDED,
@@ -347,6 +356,27 @@ class StartRandomImagesTests(ImageModeStateTestCase):
         mock_thread_cls.return_value.start.assert_called_once()
 
     @patch("server.display.cube.state.threading.Thread")
+    @patch("server.display.cube.random_modes._run_random_image_cycle", return_value=(True, "first.jpg"))
+    @patch("server.display.cube.gallery._list_local_images", return_value=[Path("first.jpg")])
+    def test_persists_active_mode(
+        self, mock_list: Mock, mock_cycle: Mock, mock_thread_cls: Mock
+    ) -> None:
+        result = start_random_images(seconds=90)
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(
+            cube_module.store.get_cube_config()["active_mode"],
+            {
+                "kind": "random_image",
+                "routine": None,
+                "seconds": 90,
+                "every": None,
+                "duration": None,
+                "renew": None,
+            },
+        )
+
+    @patch("server.display.cube.state.threading.Thread")
     @patch(
         "server.display.cube.state._stop_random_mode",
         return_value=(True, "old.gif"),
@@ -458,6 +488,16 @@ class StopRandomImagesTests(ImageModeStateTestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["message"], "Random image mode is not running.")
+
+    def test_clears_persisted_mode(self) -> None:
+        cube_module.store.update_cube_config(active_mode={"kind": "random_image"})
+        cube_module.state._RANDOM_IMAGE_MODE_RUNNING = True
+        cube_module.state._RANDOM_CURRENT_IMAGE = "shown.jpg"
+
+        result = stop_random_images()
+
+        self.assertEqual(result["status"], "success")
+        self.assertIsNone(cube_module.store.get_cube_config()["active_mode"])
 
 
 class RandomImageLoopTests(ImageModeStateTestCase):

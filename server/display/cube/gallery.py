@@ -11,6 +11,7 @@ from . import config
 from . import http
 from . import images
 from . import state
+from . import store
 
 
 def _format_size_kb(size_bytes: int) -> str:
@@ -237,6 +238,8 @@ def show_gallery_image(filename: str) -> dict[str, str]:
     was_running_gif, _previous_random = state._stop_random_mode()
     was_running_image, _previous_random_image = state._stop_image_mode()
     was_running_special, _previous_special = state._stop_special_mode()
+    if was_running_gif or was_running_image or was_running_special:
+        store.update_cube_config(active_mode=None)
 
     try:
         response = http._set_cube_gif(upload_name)
@@ -357,6 +360,8 @@ def show_gallery_gif(filename: str) -> dict[str, str]:
     was_running_gif, _previous_random = state._stop_random_mode()
     was_running_image, _previous_random_image = state._stop_image_mode()
     was_running_special, _previous_special = state._stop_special_mode()
+    if was_running_gif or was_running_image or was_running_special:
+        store.update_cube_config(active_mode=None)
 
     try:
         response = http._set_cube_gif(f"{config.TEMP_GIF_NAME}.gif")

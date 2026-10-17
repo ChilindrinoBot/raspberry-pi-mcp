@@ -11,6 +11,7 @@ from . import gallery
 from . import http
 from . import images
 from . import state
+from . import store
 
 
 def _run_random_cycle(exclude: str | None = None) -> tuple[bool, str]:
@@ -231,6 +232,17 @@ def start_random_gifs(seconds: int = config.RANDOM_GIF_DEFAULT_SECONDS) -> dict[
 
     threading.Thread(target=_random_gif_loop, args=(clamped, value), daemon=True).start()
 
+    store.update_cube_config(
+        active_mode={
+            "kind": "random_gif",
+            "routine": None,
+            "seconds": clamped,
+            "every": None,
+            "duration": None,
+            "renew": None,
+        }
+    )
+
     message = (
         f"Random gif mode started: {value} is displayed as {config.RANDOM_GIF_NAME}; "
         f"a new random gif will be shown every {clamped} seconds."
@@ -252,6 +264,7 @@ def stop_random_gifs() -> dict[str, str]:
     remains displayed on the Cube.
     """
     was_running, current = state._stop_random_mode()
+    store.update_cube_config(active_mode=None)
 
     if not was_running:
         return {"status": "success", "message": "Random gif mode is not running."}
@@ -322,6 +335,17 @@ def start_random_images(seconds: int = config.RANDOM_IMAGE_DEFAULT_SECONDS) -> d
 
     threading.Thread(target=_random_image_loop, args=(clamped, value), daemon=True).start()
 
+    store.update_cube_config(
+        active_mode={
+            "kind": "random_image",
+            "routine": None,
+            "seconds": clamped,
+            "every": None,
+            "duration": None,
+            "renew": None,
+        }
+    )
+
     message = (
         f"Random image mode started: {value} is displayed as {config.RANDOM_IMAGE_NAME}; "
         f"a new random image will be shown every {clamped} seconds."
@@ -343,6 +367,7 @@ def stop_random_images() -> dict[str, str]:
     remains displayed on the Cube.
     """
     was_running, current = state._stop_image_mode()
+    store.update_cube_config(active_mode=None)
 
     if not was_running:
         return {"status": "success", "message": "Random image mode is not running."}

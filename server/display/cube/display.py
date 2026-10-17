@@ -5,8 +5,10 @@ import re
 from ... import mcp
 from . import config
 from . import http
+from . import random_modes
 from . import state
 from . import store
+from .special import core as special_core
 
 _SCHEDULE_TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
@@ -343,6 +345,9 @@ def set_cube_gif(gif: str) -> dict[str, str]:
     was_running_gif, _previous_random = state._stop_random_mode()
     was_running_image, _previous_random_image = state._stop_image_mode()
     was_running_special, _previous_special = state._stop_special_mode()
+    # if we stopped a process we have to remove the config.
+    if was_running_gif or was_running_image or was_running_special:
+        store.update_cube_config(active_mode=None)
 
     try:
         response = http._set_cube_gif(gif)
@@ -371,26 +376,77 @@ def set_cube_gif(gif: str) -> dict[str, str]:
 def _restore_persistent_state() -> None:
     """Reload persisted cube state at boot and refresh the firmware schedule.
 
-    Production entrypoint only (`server/main.py`, never tests): when the
-    persisted schedule is enabled, re-sends it (day level live-read) so the
-    firmware holds fresh parameters and the resource reports the schedule
-    again. Failures are logged, never raised.
+    Production entrypoint only (`server/main.py`, never tests): re-sends an
+    enabled persisted schedule so the firmware holds fresh parameters, then
+    restarts the persisted active mode (random gif/image loop or special
+    routine) so it continues after the reboot. Static screens need nothing:
+    the Cube keeps showing them on its own; temporary shows are never
+    resumed. Failures are logged, never raised — a failed resume keeps the
+    stored intent for the next boot or a manual start.
     """
-    schedule = store.get_cube_config().get("schedule")
-    if not isinstance(schedule, dict) or not schedule.get("enabled"):
-        return
+    saved = store.get_cube_config()
+    schedule = saved.get("schedule")
+    if isinstance(schedule, dict) and schedule.get("enabled"):
+        try:
+            result = set_cube_brightness_schedule(
+                str(schedule["time1"]),
+                str(schedule["time2"]),
+                True,
+            )
+        except Exception as e:
+            print(f"brightness schedule: boot refresh failed: {e}")
+        else:
+            if result.get("status") != "success":
+                print(f"brightness schedule: boot refresh failed: {result.get('message')}")
+            else:
+                print(
+                    f"brightness schedule: resumed {schedule.get('time1')}-{schedule.get('time2')}"
+                )
+
+    _resume_active_mode(saved.get("active_mode"))
+
+
+def _as_int(value: object, default: int) -> int:
+    """Coerce a stored number to int, falling back to <default>."""
     try:
-        result = set_cube_brightness_schedule(
-            str(schedule["time1"]),
-            str(schedule["time2"]),
-            True,
-        )
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
+def _resume_active_mode(mode: object) -> None:
+    """Restart the persisted loop mode after a reboot (random/special only)."""
+    if not isinstance(mode, dict):
+        return
+    kind = mode.get("kind")
+    try:
+        if kind == "random_gif":
+            result = random_modes.start_random_gifs(
+                _as_int(mode.get("seconds"), config.RANDOM_GIF_DEFAULT_SECONDS)
+            )
+        elif kind == "random_image":
+            result = random_modes.start_random_images(
+                _as_int(mode.get("seconds"), config.RANDOM_IMAGE_DEFAULT_SECONDS)
+            )
+        elif kind == "special":
+            routine = str(mode.get("routine") or "").strip()
+            if not routine:
+                print("active mode: stored routine is empty, skipping resume")
+                return
+            result = special_core.start_special_routine(
+                routine,
+                _as_int(mode.get("seconds"), config.SPECIAL_DEFAULT_SECONDS),
+                _as_int(mode.get("every"), config.OIIA_DEFAULT_EVERY),
+                _as_int(mode.get("duration"), config.OIIA_DEFAULT_DURATION),
+                _as_int(mode.get("renew"), config.OIIA_DEFAULT_RENEW),
+            )
+        else:
+            print(f"active mode: unknown kind {kind!r}, skipping resume")
+            return
     except Exception as e:
-        print(f"brightness schedule: boot refresh failed: {e}")
+        print(f"active mode: resume failed: {e}")
         return
     if result.get("status") != "success":
-        print(f"brightness schedule: boot refresh failed: {result.get('message')}")
+        print(f"active mode: resume failed: {result.get('message')}")
     else:
-        print(
-            f"brightness schedule: resumed {schedule.get('time1')}-{schedule.get('time2')}"
-        )
+        print(f"active mode: resumed {kind}")
